@@ -1,0 +1,282 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>TICK.IT — Walk-in Booking Confirmation</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='booking.css') }}">
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700;900&display=swap" rel="stylesheet">
+    <style>
+        .walkin-receipt {
+            max-width: 700px;
+            margin: 40px auto;
+            background: linear-gradient(135deg, #1a0000 0%, #110000 100%);
+            border: 2px solid #CE0000;
+            border-radius: 20px;
+            padding: 40px;
+            box-shadow: 0 10px 40px rgba(206, 0, 0, 0.2);
+        }
+        .receipt-header {
+            text-align: center;
+            margin-bottom: 30px;
+        }
+        .receipt-icon {
+            font-size: 64px;
+            margin-bottom: 12px;
+        }
+        .receipt-title {
+            font-size: 28px;
+            font-weight: 900;
+            color: #fff;
+            margin-bottom: 8px;
+        }
+        .receipt-subtext {
+            font-size: 14px;
+            color: #aaa;
+        }
+        .receipt-divider {
+            height: 1px;
+            background: #300000;
+            margin: 20px 0;
+        }
+        .receipt-row {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding: 12px 0;
+            font-size: 14px;
+        }
+        .receipt-row .label {
+            color: #888;
+            font-weight: 600;
+        }
+        .receipt-row .value {
+            color: #fff;
+            font-weight: 700;
+            text-align: right;
+            max-width: 50%;
+        }
+        .receipt-row .value.ref-code {
+            color: #CE0000;
+            font-size: 16px;
+            letter-spacing: 1px;
+        }
+        .reference-box {
+            background: rgba(206, 0, 0, 0.15);
+            border: 2px solid #CE0000;
+            border-radius: 12px;
+            padding: 16px;
+            margin: 20px 0;
+            text-align: center;
+        }
+        .reference-label {
+            font-size: 12px;
+            color: #aaa;
+            text-transform: uppercase;
+            letter-spacing: 1px;
+            margin-bottom: 6px;
+        }
+        .reference-value {
+            font-size: 24px;
+            font-weight: 900;
+            color: #CE0000;
+            letter-spacing: 2px;
+        }
+        .payment-info {
+            background: rgba(255, 170, 0, 0.1);
+            border-left: 4px solid #ffd966;
+            border-radius: 8px;
+            padding: 14px;
+            margin: 20px 0;
+            font-size: 13px;
+            color: #ffaa44;
+            line-height: 1.6;
+        }
+        .discount-notice {
+            background: rgba(255, 140, 0, 0.12);
+            border: 1px solid #cc6600;
+            border-radius: 8px;
+            padding: 12px 14px;
+            margin: 14px 0;
+            font-size: 12px;
+            color: #ffaa44;
+        }
+        .qr-section {
+            text-align: center;
+            padding: 20px;
+            background: rgba(0, 0, 0, 0.3);
+            border-radius: 12px;
+            margin: 20px 0;
+        }
+        .qr-placeholder {
+            width: 200px;
+            height: 200px;
+            background: #0d0000;
+            border: 2px dashed #CE0000;
+            border-radius: 8px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            margin: 0 auto;
+            color: #666;
+            font-size: 14px;
+        }
+        .qr-text {
+            font-size: 12px;
+            color: #aaa;
+            margin-top: 12px;
+        }
+        .action-buttons {
+            display: flex;
+            gap: 12px;
+            justify-content: center;
+            margin-top: 24px;
+        }
+        .btn-primary {
+            background: #CE0000;
+            color: #fff;
+            padding: 12px 28px;
+            border: none;
+            border-radius: 8px;
+            font-weight: 700;
+            text-decoration: none;
+            cursor: pointer;
+            font-size: 14px;
+            transition: 0.2s;
+        }
+        .btn-primary:hover {
+            background: #ff0000;
+        }
+        .btn-secondary {
+            background: transparent;
+            color: #CE0000;
+            border: 2px solid #CE0000;
+            padding: 10px 24px;
+            border-radius: 8px;
+            font-weight: 700;
+            text-decoration: none;
+            cursor: pointer;
+            font-size: 14px;
+            transition: 0.2s;
+        }
+        .btn-secondary:hover {
+            background: #CE0000;
+            color: #fff;
+        }
+        .footer-note {
+            text-align: center;
+            font-size: 12px;
+            color: #666;
+            margin-top: 20px;
+            padding-top: 20px;
+            border-top: 1px solid #300000;
+        }
+    </style>
+</head>
+<body>
+
+<!-- NAVBAR -->
+<nav class="navbar" style="position:relative;">
+    <div style="display:flex;flex-direction:column;align-items:center;flex-shrink:0;gap:2px;">
+        <div class="logo" style="font-size:1.25rem;letter-spacing:2px;">TICK.<span>IT</span></div>
+    </div>
+    <div style="position:absolute;left:50%;transform:translateX(-50%);display:flex;align-items:center;gap:10px;">
+        <a href="/movies"  class="nav-btn">Movies</a>
+        <a href="/home"    class="nav-btn">Home</a>
+        <a href="/booking" class="nav-btn">Booking</a>
+    </div>
+    <div class="search-wrap">
+        <a href="/logout" class="logout-btn">Logout</a>
+    </div>
+</nav>
+
+<div style="min-height: calc(100vh - 70px); display: flex; flex-direction: column; align-items: center; justify-content: center; padding: 20px;">
+    <div class="walkin-receipt">
+        <div class="receipt-header">
+            <div class="receipt-icon">🎫</div>
+            <div class="receipt-title">Walk-In Booking Confirmed!</div>
+            <div class="receipt-subtext">Payment to be collected at cinema counter</div>
+        </div>
+
+        {% if booking %}
+        <div class="reference-box">
+            <div class="reference-label">Booking Reference</div>
+            <div class="reference-value">{{ booking.ref_code }}</div>
+        </div>
+
+        <div class="receipt-divider"></div>
+
+        <div class="receipt-row">
+            <span class="label">🎬 Movie</span>
+            <span class="value">{{ booking.movie }}</span>
+        </div>
+
+        <div class="receipt-row">
+            <span class="label">📍 Cinema</span>
+            <span class="value">{{ booking.cinema }}{% if booking.hall_name %} — {{ booking.hall_name }}{% endif %}</span>
+        </div>
+
+        <div class="receipt-row">
+            <span class="label">📅 Date</span>
+            <span class="value">{{ booking.date_fmt }}</span>
+        </div>
+
+        <div class="receipt-row">
+            <span class="label">🕐 Showtime</span>
+            <span class="value">{{ booking.time_fmt }}</span>
+        </div>
+
+        <div class="receipt-row">
+            <span class="label">💺 Seats</span>
+            <span class="value">{{ booking.seat_codes }}</span>
+        </div>
+
+        <div class="receipt-row">
+            <span class="label">🎫 Ticket Type</span>
+            <span class="value">{{ booking.ticket_type }}</span>
+        </div>
+
+        <div class="receipt-divider"></div>
+
+        <div class="receipt-row" style="font-size: 16px; font-weight: 900;">
+            <span class="label">💰 Total Amount</span>
+            <span class="value" style="color: #4caf50; font-size: 18px;">₱{{ "{:,.0f}".format(booking.total_price) }}</span>
+        </div>
+
+        <div class="payment-info">
+            💳 <strong>Payment Instructions:</strong><br>
+            Please proceed to the cinema counter to complete the payment. 
+            Show your booking reference to the staff. Payment must be completed 
+            at least 15 minutes before showtime.
+        </div>
+
+        <div class="qr-section">
+            <div style="font-size: 12px; color: #aaa; margin-bottom: 10px;">🏠 Show this ticket to cinema staff:</div>
+            <div class="qr-placeholder">📱 QR Code<br><span style="font-size: 11px;">Coming soon</span></div>
+            <div class="qr-text">You can also show your booking reference: <strong>{{ booking.ref_code }}</strong></div>
+        </div>
+
+        <div style="background: rgba(100, 175, 80, 0.1); border: 1px solid #4caf50; border-radius: 8px; padding: 12px 14px; margin: 14px 0; font-size: 12px; color: #4caf50;">
+            ✅ Your seats are reserved until 15 minutes before showtime.
+        </div>
+
+        {% endif %}
+
+        <div class="action-buttons">
+            <a href="/my-bookings" class="btn-primary">View My Bookings</a>
+            <a href="/booking" class="btn-secondary">Book More Tickets</a>
+        </div>
+
+        <div class="footer-note">
+            <p>
+                💡 <strong>Important:</strong> Arrive at the cinema at least 15 minutes before showtime.<br>
+                Keep your booking reference safe. Contact support if you have any issues.
+            </p>
+        </div>
+    </div>
+</div>
+
+<div class="footer-bar"><p class="footer-text">© 2025 TICK.IT — All rights reserved</p></div>
+
+</body>
+</html>

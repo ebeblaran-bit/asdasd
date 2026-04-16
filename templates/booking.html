@@ -1,0 +1,955 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>TICK.IT - Book Tickets</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='booking.css') }}">
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700;900&display=swap" rel="stylesheet">
+</head>
+<body>
+
+<!-- ===== NAVBAR ===== -->
+<nav class="navbar">
+    <div style="display:flex;flex-direction:column;align-items:center;flex-shrink:0;gap:2px;">
+        <div class="logo" style="font-size:1.25rem;letter-spacing:2px;">TICK.<span>IT</span></div>
+        <div style="display:flex;align-items:center;gap:6px;">
+        <div class="profile-dropdown" id="profileDropdown">
+            <a href="#" class="profile-btn" onclick="toggleDropdown(event)">
+                <img src="{{ url_for('static', filename='images/profile.png') }}" alt="Profile" class="profile-img">
+            </a>
+            <div class="dropdown-menu" id="dropdownMenu">
+                <div class="dropdown-user-header">
+                    <div class="dropdown-user-name">{{ user_name }}</div>
+                    <div class="dropdown-user-role">Member</div>
+                </div>
+                <a href="/profile"         class="dropdown-item"><span class="dropdown-icon">👤</span> View Profile</a>
+                <a href="/settings"        class="dropdown-item"><span class="dropdown-icon">⚙️</span> Settings</a>
+                <a href="/change-password" class="dropdown-item"><span class="dropdown-icon">🔑</span> Change Password</a>
+                <a href="/my-bookings"     class="dropdown-item"><span class="dropdown-icon">🎟️</span> My Bookings</a>
+                <a href="/notifications"   class="dropdown-item"><span class="dropdown-icon">🔔</span> Notifications</a>
+                <div class="dropdown-divider"></div>
+                <a href="/help"            class="dropdown-item"><span class="dropdown-icon">❓</span> Help &amp; Support</a>
+            </div>
+        </div>
+        <span style="font-weight:700;font-size:13px;color:#fff;white-space:nowrap;">{{ user_name }}</span>
+    </div>
+    </div>
+
+    <div style="position:absolute;left:50%;transform:translateX(-50%);display:flex;align-items:center;gap:10px;">
+        <a href="/movies"  class="nav-btn">Movies</a>
+        <a href="/home"    class="nav-btn">Home</a>
+        <a href="/booking" class="nav-btn active">Booking</a>
+    </div>
+
+    <div class="search-wrap">
+        <div style="display:flex;gap:8px;align-items:center;flex:1;">
+            <input type="text" class="search-input" placeholder="Search movies..." id="searchInput">
+            <button id="searchBtn" class="search-btn" onclick="executeSearch()" title="Search movies">
+                🔍
+            </button>
+        </div>
+        <div class="user-info">
+            <a href="/logout" class="logout-btn">Logout</a>
+        </div>
+    </div>
+</nav>
+
+<!-- Admin viewing banner -->
+{% if session.get('is_admin') %}
+<div style="background:#300000;border-bottom:2px solid #CE0000;padding:8px 28px;display:flex;align-items:center;justify-content:space-between;font-size:13px;">
+    <span style="color:#ff8888;font-weight:700;">⚙️ You are viewing the main site as Admin</span>
+    <a href="/admin" style="color:#fff;background:#CE0000;padding:4px 14px;border-radius:6px;font-weight:700;text-decoration:none;font-size:12px;">← Back to Admin Panel</a>
+</div>
+{% endif %}
+
+<!-- ===== SEARCH RESULTS MODAL ===== -->
+<div id="searchResultsModal" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,.92);z-index:998;overflow-y:auto;padding:20px;">
+    <div style="max-width:1200px;margin:0 auto;">
+        <!-- Close button -->
+        <button onclick="closeSearchResults()" style="position:sticky;top:10px;right:0;background:#CE0000;border:none;color:#fff;padding:8px 14px;border-radius:6px;font-size:14px;font-weight:700;cursor:pointer;float:right;z-index:999;">✕ Close</button>
+        
+        <div style="clear:both;margin-top:20px;">
+            <h2 style="color:#fff;font-size:24px;font-weight:900;margin-bottom:20px;">🔍 Search Results</h2>
+            <div id="searchResultsCount" style="color:#aaa;font-size:13px;margin-bottom:16px;"></div>
+            <div id="searchResultsGrid" style="display:grid;grid-template-columns:repeat(auto-fill,minmax(160px,1fr));gap:16px;"></div>
+            <div id="noSearchResults" style="display:none;text-align:center;padding:60px 20px;color:#666;">
+                <div style="font-size:48px;margin-bottom:16px;">🎬</div>
+                <div style="font-size:16px;font-weight:700;">No movies found</div>
+                <div style="font-size:13px;margin-top:8px;">Try searching with different keywords</div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Flash messages -->
+{% with messages = get_flashed_messages(with_categories=true) %}
+    {% for cat, msg in messages %}
+        <div class="flash-msg flash-{{ cat }}">
+            <span>{{ msg }}</span>
+            <button onclick="this.parentElement.remove()" class="flash-close">×</button>
+        </div>
+    {% endfor %}
+{% endwith %}
+
+<!-- ════════════════════════════════════════════════
+     SUCCESS RECEIPT
+════════════════════════════════════════════════ -->
+{% if booking_success %}
+<div class="receipt-wrapper">
+    <div class="receipt-card">
+        <div class="receipt-confetti">🎉</div>
+        <div class="receipt-top">
+            <div class="receipt-logo">TICK.<span>IT</span></div>
+            <div class="receipt-badge">✅ CONFIRMED</div>
+        </div>
+        <div class="receipt-movie">{{ booking.movie }}</div>
+        <div class="receipt-divider dashed"></div>
+        <div class="receipt-grid">
+            <div class="rg-item"><span class="rg-lbl">📍 Cinema</span><span class="rg-val">{{ booking.cinema }}</span></div>
+            <div class="rg-item"><span class="rg-lbl">📅 Date</span><span class="rg-val">{{ booking.date }}</span></div>
+            <div class="rg-item"><span class="rg-lbl">🕐 Showtime</span><span class="rg-val">{{ booking.showtime }}</span></div>
+            <div class="rg-item"><span class="rg-lbl">💺 Seats</span><span class="rg-val">{{ booking.seats }}</span></div>
+            <div class="rg-item"><span class="rg-lbl">👥 Tickets</span><span class="rg-val">{{ booking.ticket_count }} ticket(s)</span></div>
+            <div class="rg-item"><span class="rg-lbl">🎫 Type</span><span class="rg-val">{{ booking.ticket_type }}</span></div>
+        </div>
+        <div class="receipt-divider dashed"></div>
+        <div class="receipt-total-row">
+            <span class="receipt-total-lbl">Total Amount</span>
+            <span class="receipt-total-price">₱{{ booking.total_price }}</span>
+        </div>
+        <div class="receipt-ref">
+            Booking Reference: <strong>{{ booking.ref }}</strong>
+        </div>
+        <div class="receipt-note">
+            💡 Present this reference at the cinema counter. Please arrive 15 minutes before showtime.
+        </div>
+        <div class="receipt-actions">
+            <a href="/booking"     class="btn-outline">Book Another →</a>
+            <a href="/my-bookings" class="btn-red">My Bookings</a>
+        </div>
+    </div>
+</div>
+
+{% else %}
+<!-- ════════════════════════════════════════════════
+     STEP WIZARD HEADER
+════════════════════════════════════════════════ -->
+<div class="booking-header">
+    <h1 class="booking-title">🎟️ Book Your Cinema Ticket</h1>
+    <div class="step-wizard">
+        <div class="wizard-step {% if not movie_id and not showing_id %}active{% elif movie_id or showing_id %}done{% endif %}">
+            <span class="wz-num">{% if movie_id or showing_id %}✓{% else %}1{% endif %}</span>
+            <span class="wz-label">Choose Movie</span>
+        </div>
+        <div class="wizard-line"></div>
+        <div class="wizard-step {% if movie_id and not showing_id %}active{% elif showing_id %}done{% endif %}">
+            <span class="wz-num">{% if showing_id %}✓{% else %}2{% endif %}</span>
+            <span class="wz-label">Select Schedule</span>
+        </div>
+        <div class="wizard-line"></div>
+        <div class="wizard-step {% if showing_id %}active{% endif %}">
+            <span class="wz-num">3</span>
+            <span class="wz-label">Pick Seats</span>
+        </div>
+    </div>
+</div>
+
+<!-- ════════════════════════════════════════════════
+     STEP 1 — CHOOSE MOVIE
+════════════════════════════════════════════════ -->
+{% if not movie_id and not showing_id %}
+<div class="booking-content">
+    <h2 class="step-heading">🎬 Now Showing & Coming Soon</h2>
+    {% if all_movies %}
+    <div class="movie-picker-grid">
+        {% for m in all_movies %}
+        <a href="/booking?movie_id={{ m.id }}" class="movie-picker-card">
+            <div class="mpc-poster-wrap">
+                <img src="{{ url_for('static', filename=m.poster_path) }}"
+                     alt="{{ m.title }}" class="mpc-poster"
+                     onerror="this.src='/static/images/no_poster.png'">
+                <div class="mpc-duration">⏱ {{ m.duration_mins }} min</div>
+                {% if m.today_count and m.today_count > 0 %}
+                    <div class="mpc-badge badge-showing">🟢 Showing Today</div>
+                {% elif m.next_date %}
+                    {% set nd_str = m.next_date.strftime('%b %d') if m.next_date.strftime is defined else m.next_date|string %}
+                    <div class="mpc-badge badge-upcoming">📅 {{ m.show_label or ('Showing on ' ~ nd_str) }}</div>
+                {% else %}
+                    <div class="mpc-badge badge-ended">⚫ Run Ended</div>
+                {% endif %}
+            </div>
+            <div class="mpc-info">
+                <div class="mpc-title">{{ m.title }}</div>
+                <div class="mpc-genre">{{ m.genre }}</div>
+                <div class="mpc-rating">
+                    <span class="star">⭐</span> {{ m.rating }}/10
+                </div>
+                {% if m.next_date and (not m.today_count or m.today_count == 0) %}
+                    <div class="mpc-next">🗓 {{ m.show_label }}</div>
+                {% endif %}
+            </div>
+        </a>
+        {% endfor %}
+    </div>
+    {% else %}
+    <div class="empty-state">
+        <div class="empty-icon">🎬</div>
+        <div class="empty-text">No movies available right now.</div>
+    </div>
+    {% endif %}
+</div>
+
+<!-- ════════════════════════════════════════════════
+     STEP 2 — SELECT SCHEDULE
+════════════════════════════════════════════════ -->
+{% elif movie_id and not showing_id %}
+<div class="booking-content">
+    <a href="/booking" class="back-link">← Back to Movies</a>
+
+    {% if selected_movie %}
+    <div class="selected-movie-banner">
+        <img src="{{ url_for('static', filename=selected_movie.poster_path) }}"
+             alt="{{ selected_movie.title }}" class="smb-poster"
+             onerror="this.src='/static/images/no_poster.png'">
+        <div class="smb-info">
+            <div class="smb-title">{{ selected_movie.title }}</div>
+            <div class="smb-meta">
+                <span class="smb-genre">{{ selected_movie.genre }}</span>
+                <span class="smb-sep">•</span>
+                <span class="smb-rating">⭐ {{ selected_movie.rating }}/10</span>
+                {% if selected_movie.duration_mins %}
+                <span class="smb-sep">•</span>
+                <span class="smb-dur">⏱ {{ selected_movie.duration_mins }} min</span>
+                {% endif %}
+            </div>
+        </div>
+    </div>
+    {% endif %}
+
+    <h2 class="step-heading" style="margin-top:28px;">🗓️ Available Schedules</h2>
+
+    {% if showings_by_date %}
+        {% for date_key, date_group in showings_by_date.items() %}
+        <div class="schedule-date-group">
+            <div class="sdg-date-label">📅 {{ date_group.label }}</div>
+            <div class="sdg-showings-row">
+                {% for sh in date_group.showings %}
+                {% set is_full = sh.avail_class == 'full' %}
+                <a href="{% if not is_full %}/booking?movie_id={{ movie_id }}&showing_id={{ sh.id }}{% else %}#{% endif %}"
+                   class="showing-card {% if is_full %}showing-full{% endif %}">
+                    <div class="sc-time">{{ sh.show_time_fmt }}</div>
+                    <div class="sc-cinema">{{ sh.cinema_name }}{% if sh.hall_name %} — {{ sh.hall_name }}{% endif %}</div>
+                    <div class="sc-location">{{ sh.cinema_location }}</div>
+                    <div class="sc-avail sc-avail-{{ sh.avail_class }}">
+                        {% if sh.avail_class == 'full' %}🔴 SOLD OUT
+                        {% elif sh.avail_class == 'low' %}🟠 {{ sh.avail_label }}
+                        {% else %}🟢 {{ sh.avail_label }}
+                        {% endif %}
+                    </div>
+                </a>
+                {% endfor %}
+            </div>
+        </div>
+        {% endfor %}
+    {% else %}
+    <div class="no-showings">
+        <div class="no-showings-icon">📭</div>
+        <div class="no-showings-title">No Upcoming Showings</div>
+        <div class="no-showings-text">This movie has no scheduled showings yet.</div>
+        <a href="/booking" class="btn-outline" style="margin-top:20px;display:inline-block;">
+            ← Choose Another Movie
+        </a>
+    </div>
+    {% endif %}
+</div>
+
+<!-- ════════════════════════════════════════════════
+     STEP 3 — SEAT MAP
+════════════════════════════════════════════════ -->
+{% elif showing_id %}
+<div class="booking-content">
+    <a href="/booking?movie_id={{ movie_id }}" class="back-link">← Back to Schedules</a>
+
+    {% if selected_showing %}
+    <div class="showing-info-bar">
+        <div class="sib-item">🎬 <strong>{{ selected_showing.movie_title }}</strong></div>
+        <div class="sib-sep">|</div>
+        <div class="sib-item">📍 {{ selected_showing.cinema_name }}{% if selected_showing.hall_name %} — {{ selected_showing.hall_name }}{% endif %}</div>
+        <div class="sib-sep">|</div>
+        <div class="sib-item">📅 {{ selected_showing.show_date_fmt }}</div>
+        <div class="sib-sep">|</div>
+        <div class="sib-item">🕐 {{ selected_showing.show_time_fmt }}</div>
+    </div>
+    {% endif %}
+
+    <!-- Real-time update indicator -->
+    <div class="realtime-bar">
+        <span class="rt-dot"></span>
+        <span id="rtStatus">Seat map live — updates every 10 seconds</span>
+        <span id="rtTimer" class="rt-timer"></span>
+    </div>
+
+    <div class="seat-booking-layout">
+        <!-- LEFT: Seat Map -->
+        <div class="seat-map-panel">
+            <h2 class="step-heading">Select Your Seats</h2>
+            {% if vip_rows %}
+            <p class="seat-hint">
+                {% if vip_rows %}<strong class="vip-text">VIP rows: {{ vip_rows|join(', ') }}</strong>{% endif %}
+                {% if std_rows %} &nbsp;·&nbsp; Standard rows: {{ std_rows|join(', ') }}{% endif %}
+                &nbsp;·&nbsp; Max 10 seats per booking.
+            </p>
+            {% else %}
+            <p class="seat-hint">Select your preferred seats below. Max 10 per booking.</p>
+            {% endif %}
+
+            <!-- Screen -->
+            <div class="screen-wrap">
+                <div class="screen-bar">SCREEN</div>
+                <div class="screen-glow"></div>
+            </div>
+
+            <!-- Seat Grid -->
+            <div class="seat-grid" id="seatGrid">
+                {% for row in seat_rows %}
+                <div class="seat-row">
+                    <div class="row-label">{{ row.label }}</div>
+                    <div class="row-seats">
+                        {% for seat in row.seats %}
+                        {% if seat.is_aisle %}
+                        <div class="aisle-gap" title="Aisle"></div>
+                        {% else %}
+                        <div class="seat
+                            {% if seat.status == 'booked' %} seat-booked
+                            {% elif seat.status == 'locked' %} seat-locked
+                            {% elif seat.category == 'VIP' %} seat-vip
+                            {% elif seat.category == 'PWD' %} seat-pwd
+                            {% else %} seat-available
+                            {% endif %}"
+                            data-seat-id="{{ seat.id }}"
+                            data-seat-code="{{ seat.seat_code }}"
+                            data-category="{{ seat.category }}"
+                            data-status="{{ seat.status }}"
+                            onclick="toggleSeat(this)"
+                            title="{{ seat.seat_code }} — {{ seat.category }}{% if seat.status == 'booked' %} (Taken){% elif seat.status == 'locked' %} (Reserved){% endif %}">
+                            {{ seat.seat_number }}
+                        </div>
+                        {% endif %}
+                        {% endfor %}
+                    </div>
+                </div>
+                {% else %}
+                <div class="seat-loading">
+                    <div style="text-align:center;padding:40px 20px;color:#888;">
+                        <div style="font-size:40px;margin-bottom:12px;">🏛️</div>
+                        <div style="font-weight:700;color:#fff;margin-bottom:8px;">No seat layout configured</div>
+                        <div style="font-size:13px;">The admin has not set up a hall layout for this showing yet.</div>
+                    </div>
+                </div>
+                {% endfor %}
+            </div>
+
+            <div class="seat-map-footer">
+                <span>🎭 {{ active_seat_count }} bookable seat{{ 's' if active_seat_count != 1 else '' }}
+                {% if vip_rows %}&nbsp;|&nbsp; 🟡 VIP: rows {{ vip_rows|join(', ') }}{% endif %}
+                {% if std_rows %}&nbsp;|&nbsp; ⬛ Standard: rows {{ std_rows|join(', ') }}{% endif %}
+                </span>
+            </div>
+        </div>
+
+        <!-- RIGHT: Summary + Form -->
+        <div class="seat-form-panel">
+            <!-- Selection summary -->
+            <div class="selected-seats-summary" id="selectedSummary">
+                <h3 class="ss-title">Your Selection</h3>
+                <div class="ss-empty" id="ssEmpty">
+                    <span>🎯</span><br>
+                    Click seats on the map to select them
+                </div>
+                <div id="ssSeats" class="ss-seats-list"></div>
+                <div id="ssTotalRow" class="ss-total-row" style="display:none;">
+                    <span>Total</span>
+                    <span id="ssTotal" class="ss-total-amt">₱0</span>
+                </div>
+            </div>
+
+            <!-- Booking form (shown after seat selection) -->
+            <form method="POST" action="/booking/confirm" id="bookingForm" style="display:none;">
+                <input type="hidden" name="showing_id" value="{{ showing_id }}">
+                <input type="hidden" name="seat_ids"   id="seatIdsInput">
+
+                <!-- Ticket Type -->
+                <div class="bf-field">
+                    <label class="bf-label">🎫 Ticket Type</label>
+                    <div class="ticket-type-grid">
+                        <label class="tt-option">
+                            <input type="radio" name="ticket_type" value="Regular" checked onchange="onTicketTypeChange()">
+                            <span class="tt-btn">
+                                <span class="tt-name">Regular</span>
+                                <span class="tt-price">₱{{ movie_price or 450 }}</span>
+                            </span>
+                        </label>
+                    </div>
+                    <div style="margin-top:6px;font-size:11px;color:#aaa;">💡 VIP seats: +₱{{ (movie_price * 650 / 450) | int - (movie_price or 450) }} added</div>
+                </div>
+
+                <!-- Payment Mode -->
+                <div class="bf-field">
+                    <label class="bf-label">💳 Payment Method</label>
+                    <div class="ticket-type-grid" style="grid-template-columns:1fr 1fr;">
+                        <label class="tt-option">
+                            <input type="radio" name="payment_mode" value="walkin" checked onchange="onPaymentModeChange()">
+                            <span class="tt-btn">
+                                <span class="tt-name">🏦 Pay at Counter</span>
+                                <span class="tt-price" style="font-size:11px;color:#aaa;">Walk-in</span>
+                            </span>
+                        </label>
+                        <label class="tt-option">
+                            <input type="radio" name="payment_mode" value="online" onchange="onPaymentModeChange()">
+                            <span class="tt-btn">
+                                <span class="tt-name">📱 Pay Online</span>
+                                <span class="tt-price" style="font-size:11px;color:#aaa;">PayMongo</span>
+                            </span>
+                        </label>
+                    </div>
+                    <div id="payModeNote" style="margin-top:8px;padding:8px 12px;border-radius:8px;background:#0a2a0a;border:1px solid #1a6a1a;font-size:12px;color:#88dd88;">
+                        🏦 <strong>Walk-in:</strong> Your booking is confirmed now. Pay at the cinema counter before the show. Present your booking reference.
+                    </div>
+                </div>
+
+                <!-- Name -->
+                <div class="bf-field">
+                    <label class="bf-label">👤 Full Name on Ticket</label>
+                    <input type="text" name="customer_name" class="bf-input"
+                           value="{{ user_name }}" placeholder="Name on ticket" required>
+                </div>
+
+                <!-- Contact -->
+                <div class="bf-field">
+                    <label class="bf-label">📞 Contact Number</label>
+                    <input type="text" name="contact" class="bf-input"
+                           placeholder="09XXXXXXXXX" required maxlength="13">
+                </div>
+
+                <!-- Special Requests -->
+                <div class="bf-field">
+                    <label class="bf-label">📝 Special Requests
+                        <span class="bf-optional">(optional)</span>
+                    </label>
+                    <textarea name="special_requests" class="bf-textarea"
+                              placeholder="e.g. wheelchair access, aisle seat preference..."></textarea>
+                </div>
+
+                <!-- Lock timer notice -->
+                <div class="lock-notice" id="lockNotice" style="display:none;">
+                    ⏱ Seats reserved for <span id="lockCountdown">5:00</span> — complete your booking!
+                </div>
+
+                <button type="button" class="confirm-booking-btn" id="confirmBtn"
+                        onclick="handleConfirmClick()">
+                    Confirm Booking →
+                </button>
+                <div class="confirm-note" id="confirmNote">
+                    🏦 Payment is collected at the cinema counter. Present your booking reference on arrival.
+                </div>
+            </form>
+        </div>
+    </div>
+</div>
+{% endif %}
+{% endif %}
+
+<!-- ════════════════════════════════════════════════
+     WALK-IN CONFIRMATION DIALOG
+════════════════════════════════════════════════ -->
+<div id="walkinConfirmModal" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,.88);z-index:999;align-items:center;justify-content:center;padding:20px;">
+    <div style="background:#110000;border:2px solid #CE0000;border-radius:16px;padding:32px;max-width:420px;width:100%;text-align:center;animation:popIn .3s ease;">
+        <div style="font-size:56px;margin-bottom:16px;">🏦</div>
+        <div style="font-size:20px;font-weight:900;color:#fff;margin-bottom:8px;">Walk-In Booking Confirmation</div>
+        <div style="font-size:13px;color:#aaa;line-height:1.6;margin-bottom:24px;">
+            <strong>⚠️ Important:</strong><br>
+            You selected <strong>Pay at Counter</strong>. This booking is confirmed when you submit.<br><br>
+            <strong>You will NOT pay online.</strong> Payment will be collected when you arrive at the cinema counter.<br><br>
+            Are you sure you want to proceed with this walk-in booking?
+        </div>
+        
+        <!-- Booking Summary -->
+        <div style="background:rgba(206,0,0,.1);border:1px solid #300000;border-radius:8px;padding:12px;margin-bottom:20px;text-align:left;font-size:12px;">
+            <div style="color:#aaa;margin-bottom:2px;">📍 Booking Type:</div>
+            <div style="color:#fff;font-weight:700;margin-bottom:12px;">🏦 Walk-In Payment (Pay at Counter)</div>
+            <div style="color:#aaa;margin-bottom:2px;">⏰ Next Step:</div>
+            <div style="color:#fff;font-weight:700;">Get your booking reference → Go to cinema → Pay at counter</div>
+        </div>
+        
+        <div style="display:flex;gap:10px;justify-content:center;">
+            <button onclick="cancelWalkinConfirm()" style="padding:10px 20px;border:2px solid #CE0000;background:none;color:#CE0000;border-radius:8px;font-weight:700;font-size:13px;cursor:pointer;transition:.2s;">
+                ← Go Back
+            </button>
+            <button onclick="confirmWalkinBooking()" style="padding:10px 20px;background:#CE0000;border:none;color:#fff;border-radius:8px;font-weight:700;font-size:13px;cursor:pointer;transition:.2s;">
+                ✅ Yes, Book Walk-In
+            </button>
+        </div>
+    </div>
+</div>
+
+<!-- Seat Legend -->
+<div style="background:rgba(0,0,0,0.5);border-top:1px solid #300000;padding:20px 28px;text-align:center;">
+    <div class="seat-legend" style="justify-content:center;">
+        <span class="leg-item"><span class="leg-box l-avail"></span> Available</span>
+        <span class="leg-item"><span class="leg-box l-vip"></span> VIP</span>
+        <span class="leg-item"><span class="leg-box l-pwd"></span> PWD</span>
+        <span class="leg-item"><span class="leg-box l-selected"></span> Selected</span>
+        <span class="leg-item"><span class="leg-box l-locked"></span> Reserved</span>
+        <span class="leg-item"><span class="leg-box l-booked"></span> Taken</span>
+    </div>
+</div>
+
+<!-- ════════════════════════════════════════════════
+     FOOTER
+════════════════════════════════════════════════ -->
+<div class="footer-bar">
+    <p class="footer-text">© 2025 TICK.IT — All rights reserved</p>
+</div>
+
+<!-- ════════════════════════════════════════════════
+     JAVASCRIPT
+════════════════════════════════════════════════ -->
+<script>
+// ── Profile dropdown ─────────────────────────────
+function toggleDropdown(e) {
+    e.preventDefault();
+    document.getElementById('dropdownMenu').classList.toggle('show');
+}
+document.addEventListener('click', function(e) {
+    const pd = document.getElementById('profileDropdown');
+    if (pd && !pd.contains(e.target))
+        document.getElementById('dropdownMenu').classList.remove('show');
+});
+
+// ── Flash dismiss ────────────────────────────────
+setTimeout(() => {
+    document.querySelectorAll('.flash-msg').forEach(el => {
+        el.style.opacity = '0';
+        setTimeout(() => el.remove(), 400);
+    });
+}, 5000);
+
+// ═══════════════════════════════════════════════════
+// SEARCH FUNCTIONALITY
+// ═══════════════════════════════════════════════════
+const allMovies = [
+    {% for m in all_movies %}
+    {
+        id: {{ m.id }},
+        title: "{{ m.title }}",
+        genre: "{{ m.genre }}",
+        rating: "{{ m.rating }}",
+        price: "{{ m.price or 450 }}",
+        poster: "{{ url_for('static', filename=m.poster_path) }}",
+        today_count: {{ m.today_count or 0 }},
+        status: "{% if (not m.today_count or m.today_count == 0) and not m.next_date %}soldout{% elif m.today_count and m.today_count > 0 %}today{% else %}upcoming{% endif %}"
+    }{{ "," if not loop.last }}
+    {% endfor %}
+];
+
+function executeSearch() {
+    const searchTerm = document.getElementById('searchInput').value.toLowerCase().trim();
+    const modal = document.getElementById('searchResultsModal');
+    const resultsGrid = document.getElementById('searchResultsGrid');
+    const resultsCount = document.getElementById('searchResultsCount');
+    const noResults = document.getElementById('noSearchResults');
+    
+    if (!searchTerm) {
+        alert('Please enter a movie name to search');
+        return;
+    }
+    
+    // Filter movies based on search term
+    const results = allMovies.filter(m => 
+        m.title.toLowerCase().includes(searchTerm) ||
+        m.genre.toLowerCase().includes(searchTerm)
+    );
+    
+    // Display results
+    resultsGrid.innerHTML = '';
+    
+    if (results.length === 0) {
+        noResults.style.display = 'block';
+        resultsCount.textContent = 'No movies found matching "' + searchTerm + '"';
+    } else {
+        noResults.style.display = 'none';
+        resultsCount.textContent = 'Found ' + results.length + ' movie' + (results.length !== 1 ? 's' : '') + ' matching "' + searchTerm + '"';
+        
+        results.forEach(movie => {
+            const isSoldOut = movie.status === 'soldout';
+            const card = document.createElement('div');
+            card.style.cssText = 'border-radius:10px;overflow:hidden;background:#1a0000;border:1px solid #300000;cursor:' + (isSoldOut ? 'not-allowed' : 'pointer') + ';transition:transform .2s, border-color .2s;';
+            card.onmouseover = () => { if (!isSoldOut) card.style.transform = 'scale(1.05)'; card.style.borderColor = '#CE0000'; };
+            card.onmouseout = () => { card.style.transform = 'scale(1)'; card.style.borderColor = '#300000'; };
+            
+            let statusBadge = '';
+            let statusColor = '';
+            if (isSoldOut) { statusBadge = 'Sold Out'; statusColor = '#cc0000'; }
+            else if (movie.status === 'today') { statusBadge = 'Today'; statusColor = '#4caf50'; }
+            else if (movie.status === 'upcoming') { statusBadge = 'Upcoming'; statusColor = '#2196F3'; }
+            
+            card.innerHTML = `
+                <div style="position:relative;width:100%;aspect-ratio:2/3;">
+                    <img src="${movie.poster}" alt="${movie.title}" style="width:100%;height:100%;object-fit:cover;" onerror="this.src='/static/images/no_poster.png'">
+                    <div style="position:absolute;top:8px;right:8px;background:${statusColor};color:#fff;padding:4px 10px;border-radius:6px;font-size:11px;font-weight:700;">
+                        ${statusBadge}
+                    </div>
+                </div>
+                <div style="padding:12px;">
+                    <div style="color:#fff;font-weight:700;font-size:13px;margin-bottom:4px;line-height:1.3;min-height:26px;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden;">
+                        ${movie.title}
+                    </div>
+                    <div style="color:#aaa;font-size:11px;margin-bottom:8px;">${movie.genre}</div>
+                    <div style="color:#CE0000;font-size:12px;font-weight:700;margin-bottom:10px;">₱${movie.price}</div>
+                    <a href="/booking?movie_id=${movie.id}" style="display:block;width:100%;padding:8px;background:#CE0000;color:#fff;text-align:center;text-decoration:none;font-weight:700;font-size:12px;border-radius:6px;border:none;cursor:pointer;transition:background .2s;" 
+                       onmouseover="this.style.background='#ff0000'" 
+                       onmouseout="this.style.background='#CE0000'"
+                       ${isSoldOut ? 'style="background:#555;cursor:not-allowed;"' : ''}>
+                        ${isSoldOut ? 'Sold Out' : 'Book Now'}
+                    </a>
+                </div>
+            `;
+            resultsGrid.appendChild(card);
+        });
+    }
+    
+    // Show modal
+    modal.style.display = 'block';
+}
+
+function closeSearchResults() {
+    document.getElementById('searchResultsModal').style.display = 'none';
+}
+
+// Allow Enter key to trigger search
+document.getElementById('searchInput').addEventListener('keypress', function(e) {
+    if (e.key === 'Enter') {
+        executeSearch();
+    }
+});
+
+// ── Seat selection logic ─────────────────────────
+// Dynamic movie base price from backend
+const MOVIE_BASE_PRICE = {{ movie_price or 450 }};
+// Seat category multipliers: VIP = 1.44x, Standard = 1.0x
+const CATEGORY_MULTIPLIERS = { 'VIP': 650/450, 'Standard': 1.0, 'Regular': 1.0, 'PWD': 1.0 };
+// Regular price only - no discounts
+const TICKET_DISCOUNTS = { 'Regular': 1.0 };
+
+let selectedSeats = {};  // { seat_id: { code, category, locked } }
+let lockTimer = null;
+let lockSeconds = 300; // 5 min
+
+const SHOWING_ID = {{ showing_id or 'null' }};
+
+function getPriceForSeat(category) {
+    // Calculate price based on movie's base price and seat category
+    const multiplier = CATEGORY_MULTIPLIERS[category] || 1.0;
+    return Math.round(MOVIE_BASE_PRICE * multiplier);
+}
+
+function getTicketType() {
+    const checked = document.querySelector('input[name="ticket_type"]:checked');
+    return checked ? checked.value : 'Regular';
+}
+
+function getPrice() {
+    // Legacy: returns average/first selected seat price (used for fallback)
+    const keys = Object.keys(selectedSeats);
+    if (!keys.length) return getPriceForSeat('Standard');
+    return getPriceForSeat(selectedSeats[keys[0]].category || 'Standard');
+}
+
+function onTicketTypeChange() {
+    // Update summary when ticket type changes
+    updateSummary();
+}
+
+function getDiscountMultiplier() {
+    return 1.0; // Regular price only - no discounts
+}
+
+function updateSummary() {
+    const keys  = Object.keys(selectedSeats);
+    let total   = 0;
+
+    document.getElementById('seatIdsInput').value = keys.join(',');
+    document.getElementById('ssEmpty').style.display = keys.length ? 'none' : 'flex';
+
+    const list = document.getElementById('ssSeats');
+    list.innerHTML = '';
+    keys.forEach(id => {
+        const s     = selectedSeats[id];
+        const price = getPriceForSeat(s.category || 'Standard');
+        total += price;
+        const div = document.createElement('div');
+        div.className = 'ss-seat-item';
+        div.innerHTML = `
+            <span class="ss-seat-code ${s.category === 'VIP' ? 'tag-vip' : 'tag-std'}">${s.code}</span>
+            <span class="ss-cat">${s.category}</span>
+            <span class="ss-seat-price">₱${price.toLocaleString()}</span>
+        `;
+        list.appendChild(div);
+    });
+
+    const totalRow = document.getElementById('ssTotalRow');
+    totalRow.style.display = keys.length ? 'flex' : 'none';
+    document.getElementById('ssTotal').textContent = '₱' + total.toLocaleString();
+
+    const form = document.getElementById('bookingForm');
+    if (form) form.style.display = keys.length ? 'block' : 'none';
+}
+
+function onPaymentModeChange() {
+    const mode = document.querySelector('input[name="payment_mode"]:checked');
+    const note = document.getElementById('payModeNote');
+    const confirmNote = document.getElementById('confirmNote');
+    if (!mode) return;
+    if (mode.value === 'walkin') {
+        if (note) { note.style.background='#0a2a0a'; note.style.borderColor='#1a6a1a'; note.style.color='#88dd88';
+            note.innerHTML = '🏦 <strong>Walk-in:</strong> Your booking is confirmed now. Pay at the cinema counter before the show. Present your booking reference.'; }
+        if (confirmNote) confirmNote.textContent = '🏦 Payment is collected at the cinema counter. Present your booking reference on arrival.';
+    } else {
+        if (note) { note.style.background='#0a1a2a'; note.style.borderColor='#1a4a8a'; note.style.color='#88aadd';
+            note.innerHTML = '📱 <strong>Online:</strong> You will be redirected to PayMongo to complete payment securely.'; }
+        if (confirmNote) confirmNote.textContent = '📱 You will be redirected to the secure PayMongo payment page.';
+    }
+}
+
+function toggleSeat(el) {
+    const status   = el.dataset.status;
+    const seatId   = el.dataset.seatId;
+    const seatCode = el.dataset.seatCode;
+    const category = el.dataset.category;
+
+    if (status === 'booked' || status === 'locked') return;
+
+    if (el.classList.contains('seat-selected')) {
+        // Deselect
+        el.classList.remove('seat-selected');
+        if (category === 'VIP') el.classList.add('seat-vip');
+        else if (category === 'PWD') el.classList.add('seat-pwd');
+        else el.classList.add('seat-available');
+        delete selectedSeats[seatId];
+        // Unlock on server
+        if (SHOWING_ID) {
+            fetch('/api/unlock-seat', {
+                method: 'POST',
+                headers: {'Content-Type': 'application/json'},
+                body: JSON.stringify({ seat_id: parseInt(seatId) })
+            }).catch(() => {});
+        }
+    } else {
+        if (Object.keys(selectedSeats).length >= 10) {
+            showToast('Maximum 10 seats per booking.', 'warn');
+            return;
+        }
+        // Try to lock on server
+        if (SHOWING_ID) {
+            fetch('/api/lock-seat', {
+                method: 'POST',
+                headers: {'Content-Type': 'application/json'},
+                body: JSON.stringify({ seat_id: parseInt(seatId), showing_id: SHOWING_ID })
+            })
+            .then(r => r.json())
+            .then(data => {
+                if (data.ok) {
+                    el.classList.remove('seat-available', 'seat-vip', 'seat-pwd');
+                    el.classList.add('seat-selected');
+                    selectedSeats[seatId] = { code: seatCode, category };
+                    updateSummary();
+                    startLockTimer();
+                } else {
+                    showToast('Seat just taken — please choose another.', 'warn');
+                    el.dataset.status = 'locked';
+                    el.classList.remove('seat-available', 'seat-vip', 'seat-pwd');
+                    el.classList.add('seat-locked');
+                }
+            })
+            .catch(() => {
+                // Optimistic UI fallback
+                el.classList.remove('seat-available', 'seat-vip', 'seat-pwd');
+                el.classList.add('seat-selected');
+                selectedSeats[seatId] = { code: seatCode, category };
+                updateSummary();
+            });
+            return; // updateSummary called in .then()
+        }
+        el.classList.remove('seat-available', 'seat-vip', 'seat-pwd');
+        el.classList.add('seat-selected');
+        selectedSeats[seatId] = { code: seatCode, category };
+    }
+    updateSummary();
+}
+
+function updateSummary() {
+    const keys  = Object.keys(selectedSeats);
+    let total   = 0;
+
+    document.getElementById('seatIdsInput').value = keys.join(',');
+    document.getElementById('ssEmpty').style.display = keys.length ? 'none' : 'flex';
+
+    const list = document.getElementById('ssSeats');
+    list.innerHTML = '';
+    keys.forEach(id => {
+        const s     = selectedSeats[id];
+        const price = getPriceForSeat(s.category || 'Standard');
+        total += price;
+        const div = document.createElement('div');
+        div.className = 'ss-seat-item';
+        div.innerHTML = `
+            <span class="ss-seat-code ${s.category === 'VIP' ? 'tag-vip' : 'tag-std'}">${s.code}</span>
+            <span class="ss-cat">${s.category}</span>
+            <span class="ss-seat-price">₱${price.toLocaleString()}</span>
+        `;
+        list.appendChild(div);
+    });
+
+    const totalRow = document.getElementById('ssTotalRow');
+    totalRow.style.display = keys.length ? 'flex' : 'none';
+    document.getElementById('ssTotal').textContent = '₱' + total.toLocaleString();
+
+    const form = document.getElementById('bookingForm');
+    if (form) form.style.display = keys.length ? 'block' : 'none';
+}
+
+// ── Lock countdown timer ─────────────────────────
+function startLockTimer() {
+    if (lockTimer) clearInterval(lockTimer);
+    lockSeconds = 300;
+    const notice = document.getElementById('lockNotice');
+    if (!notice) return;
+    notice.style.display = 'block';
+
+    lockTimer = setInterval(() => {
+        lockSeconds--;
+        const m = Math.floor(lockSeconds / 60);
+        const s = lockSeconds % 60;
+        const el = document.getElementById('lockCountdown');
+        if (el) el.textContent = `${m}:${s.toString().padStart(2,'0')}`;
+        if (lockSeconds <= 0) {
+            clearInterval(lockTimer);
+            showToast('Seat reservation expired. Please re-select.', 'warn');
+            selectedSeats = {};
+            document.querySelectorAll('.seat-selected').forEach(el => {
+                const cat = el.dataset.category;
+                el.classList.remove('seat-selected');
+                el.classList.add(cat === 'VIP' ? 'seat-vip' : 'seat-available');
+            });
+            updateSummary();
+            notice.style.display = 'none';
+        }
+    }, 1000);
+}
+
+// ── Handle confirm button click ──────────────────
+function handleConfirmClick() {
+    // Validate form first
+    if (!validateForm()) {
+        return; // validateForm shows its own error messages
+    }
+    
+    // Check if walk-in or online mode
+    const paymentMode = document.querySelector('input[name="payment_mode"]:checked').value;
+    if (paymentMode === 'walkin') {
+        // ✅ Show walk-in confirmation dialog before submitting
+        showWalkinConfirmDialog();
+        return; // Don't submit yet
+    }
+    
+    // ✅ Online payment - submit form directly
+    document.getElementById('bookingForm').submit();
+}
+
+// ── Walk-In Confirmation Dialog ──────────────────
+function showWalkinConfirmDialog() {
+    const modal = document.getElementById('walkinConfirmModal');
+    modal.style.display = 'flex';
+    modal.scrollIntoView({ behavior: 'smooth', block: 'center' });
+}
+
+function cancelWalkinConfirm() {
+    document.getElementById('walkinConfirmModal').style.display = 'none';
+}
+
+function confirmWalkinBooking() {
+    // ✅ User confirmed walk-in - now submit the form
+    document.getElementById('walkinConfirmModal').style.display = 'none';
+    document.getElementById('bookingForm').submit();
+}
+
+// ── Form validation ──────────────────────────────
+function validateForm() {
+    const contact = document.querySelector('input[name="contact"]').value.trim();
+    const name    = document.querySelector('input[name="customer_name"]').value.trim();
+    if (!name || name.length < 2) { showToast('Please enter your full name.', 'error'); return false; }
+    if (!/^(\+63|0)\d{10}$/.test(contact)) { showToast('Enter a valid PH mobile: 09XXXXXXXXX', 'error'); return false; }
+    if (Object.keys(selectedSeats).length === 0) { showToast('Please select at least one seat.', 'error'); return false; }
+    return true;
+}
+
+// ── Real-time seat polling every 10 s ───────────
+if (SHOWING_ID) {
+    let countdown = 10;
+    const timerEl = document.getElementById('rtTimer');
+
+    function pollSeats() {
+        fetch('/api/seat-status/' + SHOWING_ID)
+        .then(r => r.json())
+        .then(data => {
+            data.seats.forEach(s => {
+                const el = document.querySelector(`.seat[data-seat-id="${s.id}"]`);
+                if (!el || el.classList.contains('seat-selected')) return;
+                const prev = el.dataset.status;
+                if (prev !== s.status) {
+                    el.dataset.status = s.status;
+                    el.className = 'seat';
+                    if (s.status === 'booked')         el.classList.add('seat-booked');
+                    else if (s.status === 'locked')    el.classList.add('seat-locked');
+                    else if (s.category === 'VIP')     el.classList.add('seat-vip');
+                    else if (s.category === 'PWD')     el.classList.add('seat-pwd');
+                    else                               el.classList.add('seat-available');
+
+                    // If we had this seat selected and it was taken
+                    if (selectedSeats[s.id] && s.status !== 'available') {
+                        delete selectedSeats[s.id];
+                        updateSummary();
+                        showToast(`Seat ${s.seat_code} was just taken by another user.`, 'warn');
+                    }
+                }
+            });
+        })
+        .catch(() => {});
+        countdown = 10;
+    }
+
+    setInterval(() => {
+        countdown--;
+        if (timerEl) timerEl.textContent = `(next update in ${countdown}s)`;
+        if (countdown <= 0) pollSeats();
+    }, 1000);
+    pollSeats(); // immediate first poll
+}
+
+// ── Toast notifications ──────────────────────────
+function showToast(msg, type = 'info') {
+    const t = document.createElement('div');
+    t.className = `toast toast-${type}`;
+    t.textContent = msg;
+    document.body.appendChild(t);
+    setTimeout(() => t.classList.add('toast-show'), 10);
+    setTimeout(() => {
+        t.classList.remove('toast-show');
+        setTimeout(() => t.remove(), 400);
+    }, 4000);
+}
+</script>
+
+</body>
+</html>

@@ -1,0 +1,395 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>TICK.IT - Cinema Ticketing</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;700&display=swap" rel="stylesheet">
+    <style>
+        /* Center nav buttons */
+        .navbar { position: relative; }
+        .navbar-center {
+            position: absolute;
+            left: 50%;
+            transform: translateX(-50%);
+            display: flex;
+            align-items: center;
+            gap: 10px;
+        }
+    </style>
+</head>
+<body>
+
+<!-- ===== NAVBAR ===== -->
+<nav class="navbar">
+    <!-- LEFT: TICK.IT logo stacked above profile -->
+    <div style="display:flex;flex-direction:column;align-items:center;flex-shrink:0;gap:2px;">
+        <div class="logo" style="font-size:1.25rem;letter-spacing:2px;">TICK.<span>IT</span></div>
+        <div style="display:flex;align-items:center;gap:6px;">
+            <div class="profile-dropdown" id="profileDropdown">
+                <a href="#" class="profile-btn" onclick="toggleDropdown(event)">
+                    <img src="{{ url_for('static', filename='images/profile.png') }}" alt="Profile" class="profile-img">
+                </a>
+                <div class="dropdown-menu" id="dropdownMenu">
+                    <div class="dropdown-user-header">
+                        <div class="dropdown-user-name">{{ user_name }}</div>
+                        <div class="dropdown-user-role">Member</div>
+                    </div>
+                    <a href="/profile"         class="dropdown-item"><span class="dropdown-icon">👤</span> View Profile</a>
+                    <a href="/settings"        class="dropdown-item"><span class="dropdown-icon">⚙️</span> Settings</a>
+                    <a href="/change-password" class="dropdown-item"><span class="dropdown-icon">🔑</span> Change Password</a>
+                    <a href="/my-bookings"     class="dropdown-item"><span class="dropdown-icon">🎟️</span> My Bookings</a>
+                    <a href="/notifications"   class="dropdown-item"><span class="dropdown-icon">🔔</span> Notifications</a>
+                    <div class="dropdown-divider"></div>
+                    <a href="/help"            class="dropdown-item"><span class="dropdown-icon">❓</span> Help &amp; Support</a>
+                </div>
+            </div>
+            <span style="font-weight:700;font-size:13px;color:#fff;white-space:nowrap;">{{ user_name }}</span>
+        </div>
+    </div>
+
+    <!-- CENTER: nav buttons absolutely centered -->
+    <div class="navbar-center">
+        <a href="/movies"  class="nav-btn">Movies</a>
+        <a href="/home"    class="nav-btn active">Home</a>
+        <a href="/booking" class="nav-btn">Booking</a>
+    </div>
+
+    <!-- RIGHT: search + logout -->
+    <div class="search-wrap">
+        <div style="display:flex;gap:8px;align-items:center;flex:1;">
+            <input type="text" class="search-input" placeholder="Search movies..." id="searchInput">
+            <button id="searchBtn" class="search-btn" onclick="executeSearch()" title="Search movies">
+                🔍
+            </button>
+        </div>
+        <div class="user-info">
+            <a href="/logout" class="logout-btn">Logout</a>
+        </div>
+    </div>
+</nav>
+
+<!-- Admin viewing banner -->
+{% if session.get('is_admin') %}
+<div style="background:#300000;border-bottom:2px solid #CE0000;padding:8px 28px;display:flex;align-items:center;justify-content:space-between;font-size:13px;">
+    <span style="color:#ff8888;font-weight:700;">⚙️ You are viewing the main site as Admin</span>
+    <a href="/admin" style="color:#fff;background:#CE0000;padding:4px 14px;border-radius:6px;font-weight:700;text-decoration:none;font-size:12px;">← Back to Admin Panel</a>
+</div>
+{% endif %}
+
+<!-- ===== SEARCH RESULTS MODAL ===== -->
+<div id="searchResultsModal" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,.92);z-index:998;overflow-y:auto;padding:20px;">
+    <div style="max-width:1200px;margin:0 auto;">
+        <!-- Close button -->
+        <button onclick="closeSearchResults()" style="position:sticky;top:10px;right:0;background:#CE0000;border:none;color:#fff;padding:8px 14px;border-radius:6px;font-size:14px;font-weight:700;cursor:pointer;float:right;z-index:999;">✕ Close</button>
+        
+        <div style="clear:both;margin-top:20px;">
+            <h2 style="color:#fff;font-size:24px;font-weight:900;margin-bottom:20px;">🔍 Search Results</h2>
+            <div id="searchResultsCount" style="color:#aaa;font-size:13px;margin-bottom:16px;"></div>
+            <div id="searchResultsGrid" style="display:grid;grid-template-columns:repeat(auto-fill,minmax(160px,1fr));gap:16px;"></div>
+            <div id="noSearchResults" style="display:none;text-align:center;padding:60px 20px;color:#666;">
+                <div style="font-size:48px;margin-bottom:16px;">🎬</div>
+                <div style="font-size:16px;font-weight:700;">No movies found</div>
+                <div style="font-size:13px;margin-top:8px;">Try searching with different keywords</div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- ===== HERO CAROUSEL — driven by DB movies ===== -->
+<section class="hero-section">
+    <div class="trending-label">TRENDING NOW</div>
+    <div class="carousel">
+        <div class="carousel-inner" id="carouselInner">
+            {% if movies %}
+                {% for m in movies[:3] %}
+                <div class="carousel-slide">
+                    <img src="{{ url_for('static', filename=m.poster_path) }}"
+                         alt="{{ m.title }}"
+                         onerror="this.src='/static/images/no_poster.png'">
+                </div>
+                {% endfor %}
+            {% else %}
+                <div class="carousel-slide">
+                    <div style="width:100%;height:340px;background:#1a0000;display:flex;align-items:center;justify-content:center;color:#555;font-size:18px;">No movies yet</div>
+                </div>
+            {% endif %}
+        </div>
+        <div class="carousel-dots">
+            {% for m in movies[:3] %}
+            <button class="carousel-dot {% if loop.first %}active{% endif %}"
+                    onclick="goToSlide({{ loop.index0 }})"></button>
+            {% endfor %}
+        </div>
+    </div>
+</section>
+
+<!-- ===== TRENDING THIS WEEK — top 3 DB movies ===== -->
+<section class="home-section">
+    <div class="section-header">
+        <h2 class="home-section-title">🔥 Trending This Week</h2>
+        <a href="/movies" class="see-all-link">See all →</a>
+    </div>
+    <div class="trending-movies-grid">
+        {% for m in movies[:3] %}
+        <div class="trending-movie-card">
+            <img src="{{ url_for('static', filename=m.poster_path) }}"
+                 alt="{{ m.title }}" class="trending-movie-img"
+                 onerror="this.src='/static/images/no_poster.png'">
+            <div class="trending-movie-info">
+                <div class="trending-movie-name">{{ m.title }}</div>
+                <div class="trending-movie-genre">{{ m.genre }}</div>
+                <div class="movie-rating">⭐ {{ m.rating }} / 10</div>
+                {% if m.today_count and m.today_count > 0 %}
+                    <div class="trending-movie-status badge-today-inline">🟢 {{ m.show_label or 'Showing Today' }}</div>
+                {% elif m.next_date %}
+                    <div class="trending-movie-status" style="color:#7eb8ff;">🔵 {{ m.show_label or 'Upcoming' }}</div>
+                {% else %}
+                    <div class="trending-movie-status" style="color:#888;">⚫ Run Ended</div>
+                {% endif %}
+                <div class="trending-movie-price">₱{{ m.price or 450 }}</div>
+                <a href="/booking?movie_id={{ m.id }}" class="book-now-btn">Book Now</a>
+            </div>
+        </div>
+        {% else %}
+        <div style="color:#555;padding:20px;grid-column:1/-1;">No trending movies right now.</div>
+        {% endfor %}
+    </div>
+</section>
+
+<!-- ===== NOW SHOWING TODAY ===== -->
+{% set today_movies = [] %}
+{% for m in movies %}{% if m.today_count and m.today_count > 0 %}{% set _ = today_movies.append(m) %}{% endif %}{% endfor %}
+{% if today_movies %}
+<section class="home-section dark-section">
+    <div class="section-header">
+        <h2 class="home-section-title">🎬 Now Showing Today</h2>
+        <a href="/movies" class="see-all-link">See all →</a>
+    </div>
+    <div class="mini-cards-row">
+        {% for m in today_movies[:6] %}
+        <div class="mini-card">
+            <img src="{{ url_for('static', filename=m.poster_path) }}"
+                 alt="{{ m.title }}" class="mini-card-img"
+                 onerror="this.src='/static/images/no_poster.png'">
+            <div class="mini-card-name">{{ m.title }}</div>
+            <div class="mini-card-genre">{{ m.genre }}</div>
+            <div class="mini-card-price">₱{{ m.price or 450 }}</div>
+            <a href="/booking?movie_id={{ m.id }}" class="mini-book-btn">Book</a>
+        </div>
+        {% endfor %}
+    </div>
+</section>
+{% endif %}
+
+<!-- ===== COMING SOON — upcoming movies with no today showings ===== -->
+{% set upcoming = [] %}
+{% for m in movies %}{% if (not m.today_count or m.today_count == 0) and m.next_date %}{% set _ = upcoming.append(m) %}{% endif %}{% endfor %}
+{% if upcoming %}
+<section class="home-section">
+    <div class="section-header">
+        <h2 class="home-section-title">📅 Coming Soon</h2>
+        <a href="/movies" class="see-all-link">See all →</a>
+    </div>
+    <div class="coming-soon-grid">
+        {% for m in upcoming[:4] %}
+        <div class="coming-card">
+            <img src="{{ url_for('static', filename=m.poster_path) }}"
+                 alt="{{ m.title }}" class="coming-card-img"
+                 onerror="this.src='/static/images/no_poster.png'">
+            <div class="coming-card-info">
+                <div class="coming-card-name">{{ m.title }}</div>
+                <div class="coming-card-genre">{{ m.genre }}</div>
+                <div class="coming-card-date">📅
+                    {% if m.next_date and m.next_date.strftime is defined %}{{ m.next_date.strftime('%b %d, %Y') }}
+                    {% elif m.next_date %}{{ m.next_date }}{% endif %}
+                </div>
+                <div class="coming-card-price">₱{{ m.price or 450 }}</div>
+                <a href="/booking?movie_id={{ m.id }}" class="book-now-btn">Reserve</a>
+            </div>
+        </div>
+        {% endfor %}
+    </div>
+</section>
+{% endif %}
+
+<!-- ===== CINEMAS / VENUES ===== -->
+<section class="home-section dark-section">
+    <h2 class="home-section-title" style="margin-bottom:20px;">📍 Our Cinema Locations</h2>
+    <div class="venues-grid">
+        <div class="venue-card"><div class="venue-icon">🏬</div><div class="venue-name">SM Seaside Cebu</div><div class="venue-address">SRP, Cebu City</div><div class="venue-screens">6 Screens</div></div>
+        <div class="venue-card"><div class="venue-icon">🏬</div><div class="venue-name">Gaisano Grand Minglanilla</div><div class="venue-address">Minglanilla, Cebu</div><div class="venue-screens">4 Screens</div></div>
+        <div class="venue-card"><div class="venue-icon">🏢</div><div class="venue-name">Nustar Cebu Cinema</div><div class="venue-address">SRP, Cebu City</div><div class="venue-screens">5 Screens</div></div>
+        <div class="venue-card"><div class="venue-icon">🏛️</div><div class="venue-name">Cebu IL CORSO Cinema</div><div class="venue-address">South Road Properties</div><div class="venue-screens">4 Screens</div></div>
+        <div class="venue-card"><div class="venue-icon">🎓</div><div class="venue-name">UC Cantao-an</div><div class="venue-address">Naga, Cebu</div><div class="venue-screens">2 Screens</div></div>
+        <div class="venue-card"><div class="venue-icon">🌄</div><div class="venue-name">TOPS Cebu Skydom</div><div class="venue-address">Busay, Cebu City</div><div class="venue-screens">3 Screens</div></div>
+    </div>
+</section>
+
+<!-- ===== HOW TO BOOK ===== -->
+<section class="home-section">
+    <h2 class="home-section-title" style="margin-bottom:24px;">🎟️ How to Book</h2>
+    <div class="steps-row">
+        <div class="step-card"><div class="step-number">1</div><div class="step-icon">🎬</div><div class="step-title">Browse Movies</div><div class="step-desc">Check what's showing this week on the Movies page.</div></div>
+        <div class="step-arrow">→</div>
+        <div class="step-card"><div class="step-number">2</div><div class="step-icon">📍</div><div class="step-title">Pick a Venue</div><div class="step-desc">Choose your preferred cinema from our 6 locations.</div></div>
+        <div class="step-arrow">→</div>
+        <div class="step-card"><div class="step-number">3</div><div class="step-icon">💺</div><div class="step-title">Select Seats</div><div class="step-desc">Pick your seats and confirm your schedule.</div></div>
+        <div class="step-arrow">→</div>
+        <div class="step-card"><div class="step-number">4</div><div class="step-icon">✅</div><div class="step-title">Get Your Ticket</div><div class="step-desc">Receive your e-ticket and enjoy the show!</div></div>
+    </div>
+</section>
+
+<!-- ===== ABOUT & CONTACT ===== -->
+<section class="red-section">
+    <div class="red-overlay"></div>
+    <div class="about-block">
+        <h2 class="section-title">About Us</h2>
+        <p class="about-text">
+            TICK.IT is a Cinema ticketing system that allows you to book a ticket to watch movies
+            in cinema. The Admin controls updating what movies are available this week and others.
+            Venues include SM Seaside Cebu Cinema, Gaisano Grand Minglanilla Cinema, Nustar Cebu Cinema,
+            Cebu IL CORSO Cinema, UC Cantao-an, and TOPS Cebu Skydom.
+        </p>
+    </div>
+    <div class="contact-block">
+        <h2 class="section-title">Contacts</h2>
+        <p class="contact-text">
+            Feel free to contact our online social platforms<br>
+            (Facebook, Instagram, WhatsApp, Telegram, TikTok, Viber and Gmail):<br><br>
+            <strong>TICK.IT.ph</strong><br>
+            Contact no. 0975 - 078 - 8092
+        </p>
+    </div>
+    <div class="footer-bar">
+        <p class="footer-text">&#169; 2025 TICK.IT — All rights reserved</p>
+    </div>
+</section>
+
+<script>
+    // Carousel
+    let current = 0;
+    const total = document.querySelectorAll('.carousel-slide').length;
+    const inner = document.getElementById("carouselInner");
+    const dots  = document.querySelectorAll(".carousel-dot");
+    function goToSlide(n) {
+        current = n;
+        inner.style.transform = "translateX(-" + (100 / total * n) + "%)";
+        dots.forEach((d, i) => d.classList.toggle("active", i === n));
+    }
+    if (total > 1) setInterval(() => goToSlide((current + 1) % total), 4000);
+
+    // Profile dropdown
+    function toggleDropdown(e) {
+        e.preventDefault();
+        document.getElementById("dropdownMenu").classList.toggle("show");
+    }
+    document.addEventListener("click", function(e) {
+        const pd = document.getElementById("profileDropdown");
+        if (!pd.contains(e.target))
+            document.getElementById("dropdownMenu").classList.remove("show");
+    });
+
+    // ═══════════════════════════════════════════════════
+    // SEARCH FUNCTIONALITY
+    // ═══════════════════════════════════════════════════
+    const allMovies = [
+        {% for m in movies %}
+        {
+            id: {{ m.id }},
+            title: "{{ m.title }}",
+            genre: "{{ m.genre }}",
+            rating: "{{ m.rating }}",
+            price: "{{ m.price or 450 }}",
+            poster: "{{ url_for('static', filename=m.poster_path) }}",
+            today_count: {{ m.today_count or 0 }},
+            status: "{% if (not m.today_count or m.today_count == 0) and not m.next_date %}soldout{% elif m.today_count and m.today_count > 0 %}today{% else %}upcoming{% endif %}"
+        }{{ "," if not loop.last }}
+        {% endfor %}
+    ];
+
+    function executeSearch() {
+        const searchTerm = document.getElementById('searchInput').value.toLowerCase().trim();
+        const modal = document.getElementById('searchResultsModal');
+        const resultsGrid = document.getElementById('searchResultsGrid');
+        const resultsCount = document.getElementById('searchResultsCount');
+        const noResults = document.getElementById('noSearchResults');
+        
+        if (!searchTerm) {
+            alert('Please enter a movie name to search');
+            return;
+        }
+        
+        // Filter movies based on search term
+        const results = allMovies.filter(m => 
+            m.title.toLowerCase().includes(searchTerm) ||
+            m.genre.toLowerCase().includes(searchTerm)
+        );
+        
+        // Display results
+        resultsGrid.innerHTML = '';
+        
+        if (results.length === 0) {
+            noResults.style.display = 'block';
+            resultsCount.textContent = 'No movies found matching "' + searchTerm + '"';
+        } else {
+            noResults.style.display = 'none';
+            resultsCount.textContent = 'Found ' + results.length + ' movie' + (results.length !== 1 ? 's' : '') + ' matching "' + searchTerm + '"';
+            
+            results.forEach(movie => {
+                const isSoldOut = movie.status === 'soldout';
+                const card = document.createElement('div');
+                card.style.cssText = 'border-radius:10px;overflow:hidden;background:#1a0000;border:1px solid #300000;cursor:' + (isSoldOut ? 'not-allowed' : 'pointer') + ';transition:transform .2s, border-color .2s;';
+                card.onmouseover = () => { if (!isSoldOut) card.style.transform = 'scale(1.05)'; card.style.borderColor = '#CE0000'; };
+                card.onmouseout = () => { card.style.transform = 'scale(1)'; card.style.borderColor = '#300000'; };
+                
+                let statusBadge = '';
+                let statusColor = '';
+                if (isSoldOut) { statusBadge = 'Sold Out'; statusColor = '#cc0000'; }
+                else if (movie.status === 'today') { statusBadge = 'Today'; statusColor = '#4caf50'; }
+                else if (movie.status === 'upcoming') { statusBadge = 'Upcoming'; statusColor = '#2196F3'; }
+                
+                card.innerHTML = `
+                    <div style="position:relative;width:100%;aspect-ratio:2/3;">
+                        <img src="${movie.poster}" alt="${movie.title}" style="width:100%;height:100%;object-fit:cover;" onerror="this.src='/static/images/no_poster.png'">
+                        <div style="position:absolute;top:8px;right:8px;background:${statusColor};color:#fff;padding:4px 10px;border-radius:6px;font-size:11px;font-weight:700;">
+                            ${statusBadge}
+                        </div>
+                    </div>
+                    <div style="padding:12px;">
+                        <div style="color:#fff;font-weight:700;font-size:13px;margin-bottom:4px;line-height:1.3;min-height:26px;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden;">
+                            ${movie.title}
+                        </div>
+                        <div style="color:#aaa;font-size:11px;margin-bottom:8px;">${movie.genre}</div>
+                        <div style="color:#CE0000;font-size:12px;font-weight:700;margin-bottom:10px;">₱${movie.price}</div>
+                        <a href="/booking?movie_id=${movie.id}" style="display:block;width:100%;padding:8px;background:#CE0000;color:#fff;text-align:center;text-decoration:none;font-weight:700;font-size:12px;border-radius:6px;border:none;cursor:pointer;transition:background .2s;" 
+                           onmouseover="this.style.background='#ff0000'" 
+                           onmouseout="this.style.background='#CE0000'"
+                           ${isSoldOut ? 'style="background:#555;cursor:not-allowed;"' : ''}>
+                            ${isSoldOut ? 'Sold Out' : 'Book Now'}
+                        </a>
+                    </div>
+                `;
+                resultsGrid.appendChild(card);
+            });
+        }
+        
+        // Show modal
+        modal.style.display = 'block';
+    }
+
+    function closeSearchResults() {
+        document.getElementById('searchResultsModal').style.display = 'none';
+    }
+
+    // Allow Enter key to trigger search
+    document.getElementById('searchInput').addEventListener('keypress', function(e) {
+        if (e.key === 'Enter') {
+            executeSearch();
+        }
+    });
+</script>
+
+</body>
+</html>
