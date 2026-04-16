@@ -83,8 +83,8 @@ PAY_FAILED_RATE  = 0.15
 #    - Visa: 4343 4343 4343 4343 (any future expiry + any CVC)
 #    - Mastercard: 5555 5555 5555 4444
 #    If PAYMONGO_SECRET_KEY is not set, system falls back to payment simulation.
-PAYMONGO_SECRET_KEY = "sk_test_CWokPGwZNm3ZGYvbKJmjGTXT"
-PAYMONGO_PUBLIC_KEY = "pk_test_1nfGmEUQPQKzvcQ2jeBzGBKC"
+PAYMONGO_SECRET_KEY = ""
+PAYMONGO_PUBLIC_KEY = ""
 PAYMONGO_BASE_URL   = 'https://api.paymongo.com/v1'
 
 # For LOCAL TESTING: Use mock mode even with keys configured
