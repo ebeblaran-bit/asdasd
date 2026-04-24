@@ -101,41 +101,147 @@ body {
 }
 
 /* ============================
-   TOP BAR
+   NAVBAR (consistent with other pages)
    ============================ */
-.top-bar {
+.navbar {
     position: relative;
     z-index: 10;
+    width: 100%;
+    background-color: #111;
+    border-bottom: 2px solid #300000;
+    padding: 0 28px;
+    height: 70px;
     display: flex;
     align-items: center;
-    justify-content: space-between;
-    padding: 22px 48px;
+    gap: 14px;
 }
 
 .logo {
-    font-weight: 900;
-    font-size: 2rem;
+    font-weight: 700;
+    font-size: 1.6rem;
     color: #fff;
-    letter-spacing: 3px;
-    text-shadow: 0 2px 12px rgba(0,0,0,0.5);
+    letter-spacing: 2px;
+    flex-shrink: 0;
 }
 .logo span { color: #cc0000; }
 
-.signin-top-btn {
+.nav-btn {
     display: flex;
     align-items: center;
     justify-content: center;
-    height: 38px;
-    padding: 0 22px;
-    background: #cc0000;
-    border-radius: 5px;
+    width: 108px;
+    height: 36px;
+    background: #D9D9D9;
+    border-radius: 221px;
     text-decoration: none;
     font-weight: 700;
-    font-size: 15px;
-    color: #fff;
-    transition: background 0.2s;
+    font-size: 14px;
+    color: #000;
+    transition: background 0.2s, color 0.2s;
+    white-space: nowrap;
 }
-.signin-top-btn:hover { background: #e60000; }
+.nav-btn:hover { background: #cc0000; color: #fff; }
+
+.nav-auth-links { display: flex; gap: 10px; align-items: center; flex-shrink: 0; margin-left: auto; }
+.nav-auth-btn {
+    display: flex; align-items: center; justify-content: center;
+    height: 30px; padding: 0 14px;
+    background: rgba(217,217,217,0.15);
+    border: 2px solid rgba(255,255,255,0.25);
+    border-radius: 221px;
+    text-decoration: none; font-weight: 700; font-size: 12px; color: #fff;
+    transition: all 0.2s;
+}
+.nav-auth-btn:hover { background: rgba(204,0,0,0.4); border-color: #cc0000; }
+
+/* ============================
+   RESPONSIVE - MOBILE FIRST
+   ============================ */
+@media (max-width: 768px) {
+    /* Navbar */
+    .navbar {
+        padding: 0 16px;
+        height: 60px;
+    }
+    .logo {
+        font-size: 1.4rem;
+    }
+    .nav-auth-links {
+        display: none;
+    }
+    .nav-btn {
+        display: none;
+    }
+}
+
+@media (max-width: 400px) {
+    .navbar {
+        height: 50px;
+    }
+    .logo {
+        font-size: 1.2rem;
+    }
+}
+
+/* Mobile hero adjustments */
+@media (max-width: 768px) {
+    .hero-content {
+        padding: 20px 16px 40px;
+        justify-content: flex-start;
+        padding-top: 80px;
+    }
+    .hero-tagline {
+        font-size: 0.75rem;
+        letter-spacing: 2px;
+        margin-bottom: 12px;
+    }
+    .hero-title {
+        font-size: clamp(2rem, 10vw, 3rem);
+        line-height: 1.1;
+        margin-bottom: 16px;
+    }
+    .hero-desc {
+        font-size: 0.9rem;
+        max-width: 100%;
+        line-height: 1.5;
+        margin-bottom: 28px;
+    }
+    .hero-signin-btn {
+        height: 48px;
+        padding: 0 32px;
+        font-size: 16px;
+    }
+    .now-showing-strip {
+        gap: 8px;
+        padding: 0 16px 20px;
+        flex-direction: column;
+        align-items: center;
+        text-align: center;
+    }
+    .strip-item {
+        font-size: 10px;
+        letter-spacing: 1px;
+    }
+    .strip-item:not(.highlighted) {
+        display: none;
+    }
+    .bg-posters {
+        grid-template-columns: repeat(2, 1fr);
+        grid-template-rows: repeat(3, 1fr);
+    }
+    .bg-poster {
+        opacity: 0.35;
+    }
+}
+
+@media (max-width: 400px) {
+    .hero-title {
+        font-size: 1.8rem;
+    }
+    .hero-desc {
+        font-size: 0.85rem;
+    }
+}
 
 /* ============================
    HERO CONTENT
@@ -221,22 +327,17 @@ body {
     font-size: 11px;
     font-weight: 700;
     color: rgba(255,255,255,0.4);
-    letter-spacing: 2px;
-    text-transform: uppercase;
 }
 .strip-item.highlighted { color: rgba(255,255,255,0.65); }
 
-/* ============================
-   RESPONSIVE
-   ============================ */
-@media (max-width: 600px) {
-    .top-bar { padding: 16px 20px; }
-    .logo { font-size: 1.5rem; }
-    .hero-content { padding-bottom: 40px; }
-    .now-showing-strip { gap: 12px; padding: 0 20px 20px; }
-    /* Reduce to 2 columns on mobile for performance */
-    .bg-posters {
-        grid-template-columns: repeat(2, 1fr);
-        grid-template-rows: repeat(3, 1fr);
-    }
+/* Footer */
+.footer-bar {
+    width: 100%;
+    background: rgba(0,0,0,0.49);
+    height: 58px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    margin-top: 26px;
 }
+.footer-text { font-weight: 700; font-size: 14px; color: #fff; }

@@ -1,0 +1,186 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>TICK.IT — Staff Management</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='admin.css') }}">
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700;800;900&display=swap" rel="stylesheet">
+</head>
+<body>
+
+<!-- HEADER -->
+<header class="admin-header">
+    <div class="admin-logo">TICK.<span>IT</span></div>
+    <div class="admin-title-bar">Staff Management</div>
+    <div class="admin-header-right">
+        <span style="font-size:13px;color:#888;">Admin</span>
+        <a href="/admin/logout" class="admin-logout-btn">Logout</a>
+    </div>
+</header>
+
+<div class="admin-body">
+    <!-- SIDEBAR -->
+    <nav class="admin-sidebar">
+        <span class="sidebar-label">Main</span>
+        <a href="/admin" class="sidebar-link">
+            <span class="sidebar-icon">📊</span><span>Dashboard</span>
+        </a>
+        <div class="sidebar-divider"></div>
+        <span class="sidebar-label">Manage</span>
+        <a href="/admin/movies" class="sidebar-link">
+            <span class="sidebar-icon">🎬</span><span>Movies</span>
+        </a>
+        <a href="/admin/bookings" class="sidebar-link">
+            <span class="sidebar-icon">🎟️</span><span>Bookings</span>
+        </a>
+        <a href="/admin/halls" class="sidebar-link">
+            <span class="sidebar-icon">🏛️</span><span>Halls</span>
+        </a>
+        <a href="/admin/payments" class="sidebar-link">
+            <span class="sidebar-icon">💳</span><span>Payments</span>
+        </a>
+        <a href="/admin/users" class="sidebar-link">
+            <span class="sidebar-icon">👥</span><span>Users</span>
+        </a>
+        <a href="/admin/staff" class="sidebar-link active">
+            <span class="sidebar-icon">🎫</span><span>Staff</span>
+        </a>
+        <div class="sidebar-divider"></div>
+        <a href="/home" class="sidebar-link">
+            <span class="sidebar-icon">🏠</span><span>Main Site</span>
+        </a>
+
+    </nav>
+
+    <!-- MAIN -->
+    <main class="admin-main">
+
+        {% with messages = get_flashed_messages(with_categories=true) %}
+            {% for cat, msg in messages %}
+                <div class="alert alert-{{ cat }}">{{ msg }}</div>
+            {% endfor %}
+        {% endwith %}
+
+        <div class="page-heading">🎫 Staff Management</div>
+
+        <!-- STATS ROW -->
+        <div class="stats-grid" style="grid-template-columns: repeat(3, 1fr); margin-bottom: 24px;">
+            <div class="stat-card">
+                <div class="stat-icon">👤</div>
+                <div class="stat-label">Total Staff</div>
+                <div class="stat-value">{{ staff|length }}</div>
+            </div>
+            <div class="stat-card">
+                <div class="stat-icon" style="color:#4caf50;">✓</div>
+                <div class="stat-label">Active</div>
+                <div class="stat-value" style="color:#4caf50;">{{ staff|selectattr('is_active')|list|length }}</div>
+            </div>
+            <div class="stat-card">
+                <div class="stat-icon" style="color:#ff6666;">✕</div>
+                <div class="stat-label">Inactive</div>
+                <div class="stat-value" style="color:#ff6666;">{{ staff|rejectattr('is_active')|list|length }}</div>
+            </div>
+        </div>
+
+        <!-- TWO PANELS -->
+        <div style="display:grid; grid-template-columns: 1fr 1fr; gap: 24px;">
+            
+            <!-- CREATE STAFF -->
+            <div class="admin-panel">
+                <div class="panel-header">
+                    <div class="panel-title">＋ Create Staff Account</div>
+                </div>
+                <div class="panel-body">
+                    <form method="POST" action="/admin/staff/create">
+                        <div class="form-group">
+                            <label class="form-label">Full Name *</label>
+                            <input type="text" name="full_name" class="form-control" placeholder="Juan Dela Cruz" required>
+                        </div>
+                        
+                        <div class="form-group">
+                            <label class="form-label">Email *</label>
+                            <input type="email" name="email" class="form-control" placeholder="staff@example.com" required>
+                            <span style="font-size:11px;color:#666;">Staff will use this to log in</span>
+                        </div>
+                        
+                        <div class="form-group">
+                            <label class="form-label">Employee ID *</label>
+                            <input type="text" name="employee_id" class="form-control" placeholder="EMP-001" required>
+                        </div>
+                        
+                        <div class="form-group">
+                            <label class="form-label">Assigned Cinema</label>
+                            <select name="cinema_id" class="form-control">
+                                <option value="">-- Select Cinema --</option>
+                                {% for c in cinemas %}
+                                <option value="{{ c.id }}">{{ c.name }}</option>
+                                {% endfor %}
+                            </select>
+                        </div>
+                        
+                        <div class="form-group">
+                            <label class="form-label">Temporary Password *</label>
+                            <input type="text" name="password" class="form-control" placeholder="temp123" required>
+                            <span style="font-size:11px;color:#666;">Staff should change after first login</span>
+                        </div>
+                        
+                        <button type="submit" class="panel-action-btn" style="width:100%;">Create Staff Account</button>
+                    </form>
+                </div>
+            </div>
+
+            <!-- EXISTING STAFF -->
+            <div class="admin-panel">
+                <div class="panel-header">
+                    <div class="panel-title">👥 Existing Staff</div>
+                </div>
+                <div class="panel-body" style="padding:0;">
+                    {% if staff %}
+                    <div class="admin-table-wrap">
+                        <table class="admin-table">
+                            <thead>
+                                <tr>
+                                    <th>Name</th>
+                                    <th>Email</th>
+                                    <th>Emp. ID</th>
+                                    <th>Cinema</th>
+                                    <th>Status</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                {% for s in staff %}
+                                <tr>
+                                    <td style="font-weight:700;">{{ s.full_name }}</td>
+                                    <td style="font-size:12px;color:#aaa;">{{ s.email }}</td>
+                                    <td><code style="color:#CE0000;font-size:11px;">{{ s.employee_id }}</code></td>
+                                    <td style="font-size:12px;">{{ s.cinema_name or '—' }}</td>
+                                    <td>
+                                        {% if s.is_active %}
+                                        <span class="badge badge-confirmed">Active</span>
+                                        {% else %}
+                                        <span class="badge badge-inactive">Inactive</span>
+                                        {% endif %}
+                                    </td>
+                                </tr>
+                                {% endfor %}
+                            </tbody>
+                        </table>
+                    </div>
+                    {% else %}
+                    <div class="empty-state" style="padding:40px;">
+                        <div class="empty-state-icon">👤</div>
+                        <div class="empty-state-text">No staff yet. Create one!</div>
+                    </div>
+                    {% endif %}
+                </div>
+            </div>
+        </div>
+
+    </main>
+</div>
+
+<footer class="admin-footer">© 2025 TICK.IT — Admin Panel</footer>
+
+</body>
+</html>

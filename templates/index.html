@@ -6,26 +6,13 @@
     <title>TICK.IT - Cinema Ticketing</title>
     <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;700&display=swap" rel="stylesheet">
-    <style>
-        /* Center nav buttons */
-        .navbar { position: relative; }
-        .navbar-center {
-            position: absolute;
-            left: 50%;
-            transform: translateX(-50%);
-            display: flex;
-            align-items: center;
-            gap: 10px;
-        }
-    </style>
 </head>
 <body>
 
 <!-- ===== NAVBAR ===== -->
 <nav class="navbar">
-    <!-- LEFT: TICK.IT logo stacked above profile -->
-    <div style="display:flex;flex-direction:column;align-items:center;flex-shrink:0;gap:2px;">
-        <div class="logo" style="font-size:1.25rem;letter-spacing:2px;">TICK.<span>IT</span></div>
+    <div style="display:flex;flex-direction:column;align-items:center;gap:4px;flex-shrink:0;">
+        <div class="logo">TICK.<span>IT</span></div>
         <div style="display:flex;align-items:center;gap:6px;">
             <div class="profile-dropdown" id="profileDropdown">
                 <a href="#" class="profile-btn" onclick="toggleDropdown(event)">
@@ -45,28 +32,20 @@
                     <a href="/help"            class="dropdown-item"><span class="dropdown-icon">❓</span> Help &amp; Support</a>
                 </div>
             </div>
-            <span style="font-weight:700;font-size:13px;color:#fff;white-space:nowrap;">{{ user_name }}</span>
+            <span style="font-weight:700;font-size:12px;color:#fff;white-space:nowrap;">{{ user_name }}</span>
         </div>
     </div>
 
-    <!-- CENTER: nav buttons absolutely centered -->
-    <div class="navbar-center">
+    <div class="nav-buttons">
         <a href="/movies"  class="nav-btn">Movies</a>
         <a href="/home"    class="nav-btn active">Home</a>
         <a href="/booking" class="nav-btn">Booking</a>
     </div>
 
-    <!-- RIGHT: search + logout -->
     <div class="search-wrap">
-        <div style="display:flex;gap:8px;align-items:center;flex:1;">
-            <input type="text" class="search-input" placeholder="Search movies..." id="searchInput">
-            <button id="searchBtn" class="search-btn" onclick="executeSearch()" title="Search movies">
-                🔍
-            </button>
-        </div>
-        <div class="user-info">
-            <a href="/logout" class="logout-btn">Logout</a>
-        </div>
+        <input type="text" class="search-input" placeholder="Search movies..." id="searchInput">
+        <button id="searchBtn" class="search-btn" onclick="executeSearch()" title="Search movies">🔍</button>
+        <a href="/logout" class="logout-btn">Logout</a>
     </div>
 </nav>
 
@@ -92,6 +71,39 @@
                 <div style="font-size:48px;margin-bottom:16px;">🎬</div>
                 <div style="font-size:16px;font-weight:700;">No movies found</div>
                 <div style="font-size:13px;margin-top:8px;">Try searching with different keywords</div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- ===== MOVIE INFO MODAL ===== -->
+<div id="movieInfoModal" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,.92);z-index:999;overflow-y:auto;padding:20px;">
+    <div style="max-width:900px;margin:40px auto;background:#1a0000;border:2px solid #CE0000;border-radius:16px;overflow:hidden;">
+        <button onclick="closeMovieInfo()" style="position:absolute;top:30px;right:30px;background:#CE0000;border:none;color:#fff;padding:10px 16px;border-radius:8px;font-size:16px;font-weight:700;cursor:pointer;z-index:1000;">✕</button>
+        
+        <div style="display:flex;gap:30px;padding:30px;">
+            <div style="flex-shrink:0;">
+                <img id="modalPoster" src="" alt="Movie Poster" style="width:250px;height:375px;object-fit:cover;border-radius:12px;border:2px solid #300000;">
+            </div>
+            <div style="flex:1;color:#fff;">
+                <h2 id="modalTitle" style="font-size:32px;font-weight:900;margin:0 0 12px 0;color:#CE0000;"></h2>
+                <div style="display:flex;gap:16px;margin-bottom:20px;font-size:14px;color:#aaa;">
+                    <span id="modalGenre"></span>
+                    <span>•</span>
+                    <span id="modalDuration"></span>
+                    <span>•</span>
+                    <span id="modalRating" style="color:#ffc800;">⭐</span>
+                </div>
+                <div style="background:#0a0000;border:1px solid #300000;border-radius:8px;padding:16px;margin-bottom:20px;">
+                    <h3 style="font-size:16px;font-weight:700;margin:0 0 10px 0;color:#CE0000;">📝 Description</h3>
+                    <p id="modalDescription" style="font-size:14px;line-height:1.7;color:#ccc;margin:0;white-space:pre-wrap;"></p>
+                </div>
+                <div style="display:flex;gap:12px;align-items:center;">
+                    <div style="font-size:24px;font-weight:900;color:#CE0000;" id="modalPrice"></div>
+                    <button id="modalBookBtn" onclick="bookFromModal()" style="flex:1;padding:14px 24px;background:#CE0000;border:none;color:#fff;border-radius:8px;font-size:16px;font-weight:700;cursor:pointer;transition:.2s;">
+                        Book Now →
+                    </button>
+                </div>
             </div>
         </div>
     </div>
@@ -133,7 +145,16 @@
     </div>
     <div class="trending-movies-grid">
         {% for m in movies[:3] %}
-        <div class="trending-movie-card">
+        <div class="trending-movie-card" style="cursor:pointer;"
+             data-movie-id="{{ m.id }}"
+             data-movie-title="{{ m.title }}"
+             data-movie-desc="{{ (m.description or 'No description available.') | replace('"', '&quot;') | replace("'", '&#39;') }}"
+             data-movie-rating="{{ m.rating }}"
+             data-movie-genre="{{ m.genre }}"
+             data-movie-duration="{{ m.duration_mins }}"
+             data-movie-price="{{ m.price or 450 }}"
+             data-movie-poster="{{ url_for('static', filename=m.poster_path) }}"
+             onclick="openMovieInfo(this, true)">
             <img src="{{ url_for('static', filename=m.poster_path) }}"
                  alt="{{ m.title }}" class="trending-movie-img"
                  onerror="this.src='/static/images/no_poster.png'">
@@ -149,7 +170,7 @@
                     <div class="trending-movie-status" style="color:#888;">⚫ Run Ended</div>
                 {% endif %}
                 <div class="trending-movie-price">₱{{ m.price or 450 }}</div>
-                <a href="/booking?movie_id={{ m.id }}" class="book-now-btn">Book Now</a>
+                <a href="/booking?movie_id={{ m.id }}" class="book-now-btn" onclick="event.stopPropagation();">Book Now</a>
             </div>
         </div>
         {% else %}
@@ -387,6 +408,72 @@
     document.getElementById('searchInput').addEventListener('keypress', function(e) {
         if (e.key === 'Enter') {
             executeSearch();
+        }
+    });
+
+    // ═══════════════════════════════════════════════════
+    // MOVIE INFO MODAL
+    // ═══════════════════════════════════════════════════
+    let currentMovieId = null;
+
+    function openMovieInfo(card, canBook) {
+        const modal = document.getElementById('movieInfoModal');
+        const title = card.dataset.movieTitle;
+        const desc = decodeHTML(card.dataset.movieDesc);
+        const rating = card.dataset.movieRating;
+        const genre = card.dataset.movieGenre;
+        const duration = card.dataset.movieDuration;
+        const price = card.dataset.moviePrice;
+        const poster = card.dataset.moviePoster;
+        currentMovieId = card.dataset.movieId;
+
+        document.getElementById('modalTitle').textContent = title;
+        document.getElementById('modalGenre').textContent = genre;
+        document.getElementById('modalDuration').textContent = duration + ' min';
+        document.getElementById('modalRating').textContent = '⭐ ' + rating + '/10';
+        document.getElementById('modalDescription').textContent = desc;
+        document.getElementById('modalPrice').textContent = '₱' + price;
+        document.getElementById('modalPoster').src = poster;
+        
+        const bookBtn = document.getElementById('modalBookBtn');
+        if (canBook) {
+            bookBtn.style.display = 'block';
+            bookBtn.disabled = false;
+            bookBtn.textContent = 'Book Now →';
+            bookBtn.style.background = '#CE0000';
+            bookBtn.style.cursor = 'pointer';
+        } else {
+            bookBtn.style.display = 'block';
+            bookBtn.disabled = true;
+            bookBtn.textContent = 'Sold Out';
+            bookBtn.style.background = '#555';
+            bookBtn.style.cursor = 'not-allowed';
+        }
+        
+        modal.style.display = 'block';
+    }
+
+    function closeMovieInfo() {
+        document.getElementById('movieInfoModal').style.display = 'none';
+        currentMovieId = null;
+    }
+
+    function bookFromModal() {
+        if (currentMovieId) {
+            window.location.href = '/booking?movie_id=' + currentMovieId;
+        }
+    }
+
+    function decodeHTML(html) {
+        const txt = document.createElement('textarea');
+        txt.innerHTML = html;
+        return txt.value;
+    }
+
+    // Close modal when clicking outside
+    document.getElementById('movieInfoModal').addEventListener('click', function(e) {
+        if (e.target === this) {
+            closeMovieInfo();
         }
     });
 </script>

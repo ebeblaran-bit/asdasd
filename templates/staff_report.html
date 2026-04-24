@@ -1,0 +1,100 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+<title>Daily Report | TICK.IT Staff</title>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700;900&display=swap" rel="stylesheet">
+<style>
+*{margin:0;padding:0;box-sizing:border-box}
+body{font-family:'Inter',sans-serif;background:#0d0000;color:#fff;min-height:100vh}
+
+.hdr{background:#000;border-bottom:2px solid #CE0000;padding:10px 14px;
+     display:flex;align-items:center;justify-content:space-between;gap:8px}
+.hdr-logo{font-size:18px;font-weight:900;color:#CE0000}
+.hdr-name{font-size:11px;color:#888}
+.nav{display:flex;gap:4px}
+.nav a{color:#aaa;text-decoration:none;font-size:11px;padding:5px 8px;
+       border-radius:6px;transition:all .2s}
+.nav a:hover{color:#CE0000}
+.nav a.active{color:#fff;background:rgba(206,0,0,.25);border:1px solid #CE0000}
+
+.wrap{max-width:560px;margin:0 auto;padding:14px}
+
+.card{background:rgba(0,0,0,.4);border:2px solid #333;border-radius:14px;
+      padding:14px;margin-bottom:14px}
+.card-title{font-size:15px;font-weight:700;margin-bottom:12px}
+
+.stats{display:grid;grid-template-columns:repeat(2,1fr);gap:10px;margin-bottom:14px}
+.stat{background:rgba(206,0,0,.1);border:1px solid #CE0000;
+      border-radius:10px;padding:12px;text-align:center}
+.stat-n{font-size:28px;font-weight:900;color:#CE0000}
+.stat-l{font-size:10px;color:#aaa;text-transform:uppercase;margin-top:2px}
+
+.v-item{display:flex;justify-content:space-between;align-items:center;
+        padding:10px;background:rgba(255,255,255,.03);
+        border-radius:8px;margin-bottom:6px}
+.v-ref{font-weight:700;color:#CE0000;font-size:12px}
+.v-name{font-size:11px;color:#888;margin-top:2px}
+.v-time{font-size:10px;color:#666;margin-top:2px}
+.badge{font-size:10px;padding:3px 8px;border-radius:10px}
+.b-ok  {background:rgba(76,175,80,.2);color:#4caf50}
+.b-warn{background:rgba(255,152,0,.2);color:#ff9800}
+.b-err {background:rgba(244,67,54,.2);color:#f44336}
+
+.back-link{display:inline-flex;align-items:center;gap:6px;
+           color:#CE0000;text-decoration:none;font-size:13px;font-weight:600}
+.back-link:hover{text-decoration:underline}
+</style>
+</head>
+<body>
+
+<div class="hdr">
+  <div class="hdr-logo">TICK.IT</div>
+  <nav class="nav">
+    <a href="{{ url_for('staff_dashboard') }}">Scan</a>
+    <a href="{{ url_for('staff_booking_lookup') }}">Lookup</a>
+    <a href="{{ url_for('staff_daily_report') }}" class="active">Report</a>
+    <a href="{{ url_for('logout') }}">Logout</a>
+  </nav>
+  <div class="hdr-name">{{ staff_name }}</div>
+</div>
+
+<div class="wrap">
+
+  <div class="card">
+    <div class="card-title">📊 Daily Report — {{ report_date }}</div>
+
+    {% if summary %}
+    <div class="stats">
+      <div class="stat"><div class="stat-n">{{ summary.total_verifications or 0 }}</div><div class="stat-l">Total Scans</div></div>
+      <div class="stat"><div class="stat-n">{{ summary.successful or 0 }}</div><div class="stat-l">Successful</div></div>
+      <div class="stat"><div class="stat-n">{{ summary.expired or 0 }}</div><div class="stat-l">Expired</div></div>
+      <div class="stat"><div class="stat-n">{{ summary.already_used or 0 }}</div><div class="stat-l">Already Used</div></div>
+    </div>
+    {% endif %}
+  </div>
+
+  <div class="card">
+    <div class="card-title">📋 Verification Log</div>
+    {% for v in details %}
+    <div class="v-item">
+      <div>
+        <div class="v-ref">{{ v.ref_code or ('REF #' ~ v.booking_id) }}</div>
+        <div class="v-name">{{ v.customer_name or '—' }} · {{ v.movie_title or '—' }}</div>
+        <div class="v-time">{{ v.scanned_at.strftime('%H:%M:%S') if v.scanned_at else '—' }}</div>
+      </div>
+      <span class="badge {{ 'b-ok' if v.scan_status == 'valid' else ('b-warn' if v.scan_status == 'already_used' else 'b-err') }}">
+        {{ v.scan_status }}
+      </span>
+    </div>
+    {% else %}
+    <div style="text-align:center;color:#555;padding:16px;font-size:13px">No verifications on this date</div>
+    {% endfor %}
+  </div>
+
+  <a href="{{ url_for('staff_dashboard') }}" class="back-link">← Back to Scanner</a>
+
+</div>
+</body>
+</html>

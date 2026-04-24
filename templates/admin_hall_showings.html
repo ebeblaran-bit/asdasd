@@ -419,6 +419,40 @@ function validateAssign() {
     if (selectedDates.length === 0) { alert('Please add at least one show date.'); return false; }
     if (selectedTimes.length === 0) { alert('Please add at least one show time.'); return false; }
     
+    // Validate that no showing is in the past
+    const now = new Date();
+    const currentDate = now.toISOString().split('T')[0]; // YYYY-MM-DD
+    const currentTime = now.toTimeString().split(' ')[0].substring(0, 5); // HH:MM
+    
+    let hasPastTime = false;
+    let pastCount = 0;
+    
+    for (const date of selectedDates) {
+        for (const time of selectedTimes) {
+            if (date < currentDate || (date === currentDate && time <= currentTime)) {
+                hasPastTime = true;
+                pastCount++;
+            }
+        }
+    }
+    
+    if (hasPastTime) {
+        const totalShowings = selectedDates.length * selectedTimes.length;
+        const futureShowings = totalShowings - pastCount;
+        
+        if (futureShowings === 0) {
+            alert('❌ All selected date/time combinations are in the past!\n\nPlease select future dates and times.');
+            return false;
+        } else {
+            const proceed = confirm(
+                `⚠️ Warning: ${pastCount} out of ${totalShowings} showing(s) are in the past and will be skipped.\n\n` +
+                `${futureShowings} future showing(s) will be created.\n\n` +
+                `Do you want to proceed?`
+            );
+            if (!proceed) return false;
+        }
+    }
+    
     console.log('Validation passed. Hidden fields:');
     console.log('Date inputs:', document.querySelectorAll('input[name="show_dates"]').length);
     console.log('Time inputs:', document.querySelectorAll('input[name="show_times"]').length);

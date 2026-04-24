@@ -121,7 +121,7 @@
             </div>
             <div class="info-item">
                 <div class="info-lbl">💰 Total Paid</div>
-                <div class="info-val" style="color:#4caf50;">₱{{ "{:,.0f}".format(booking.total_price) }}</div>
+                <div class="info-val" style="color:#4caf50;">₱{{ "{:,.0f}".format((((booking.total_price) | float) or 0)) }}</div>
             </div>
             <div class="info-item">
                 <div class="info-lbl">🔖 Reference</div>
@@ -129,6 +129,17 @@
             </div>
         </div>
 
+        {% if payment_status == 'paid' %}
+        <div style="margin-top:20px;text-align:center;">
+            <div style="font-size:13px;color:#aaa;margin-bottom:10px;">📱 Your entry QR code — show to staff at the cinema:</div>
+            <img src="{{ url_for('booking_qr_image', ref_code=booking.ref_code) }}"
+                 alt="Booking QR Code"
+                 style="width:200px;height:200px;border-radius:8px;background:#fff;padding:8px;">
+            <div style="font-size:12px;color:#666;margin-top:8px;">
+                Or use reference: <strong style="color:#CE0000;">{{ booking.ref_code }}</strong>
+            </div>
+        </div>
+        {% endif %}
 
         {% endif %}
 

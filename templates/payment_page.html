@@ -121,7 +121,7 @@
             <div class="sum-row"><span class="sum-lbl">🎟️ Count</span><span class="sum-val">{{ booking.ticket_count }} ticket(s)</span></div>
             <div class="sum-total">
                 <div class="tot-lbl">TOTAL DUE</div>
-                <div class="tot-amt">₱{{ "{:,.0f}".format(booking.total_price) }}</div>
+                <div class="tot-amt">₱{{ "{:,.0f}".format((((booking.total_price) | float) or 0)) }}</div>
             </div>
             <div class="timer-row">
                 <span class="ti">⏰</span>
@@ -197,7 +197,7 @@
                     <div class="gcash-label">Send GCash payment to:</div>
                     <div class="gcash-num">0975-078-8092</div>
                     <div class="gcash-label">Account Name: TICK.IT Cinema</div>
-                    <div class="gcash-amount">₱{{ "{:,.0f}".format(booking.total_price) }}</div>
+                    <div class="gcash-amount">₱{{ "{:,.0f}".format((((booking.total_price) | float) or 0)) }}</div>
                     <div class="gcash-label" style="margin-top:4px;">Reference: {{ booking.ref_code }}</div>
                 </div>
                 <div class="fg">
@@ -216,7 +216,7 @@
             <div id="form-maya" style="display:none;">
                 <div class="notice notice-purple" style="margin-bottom:16px;">
                     💜 <strong>Maya / PayMaya</strong><br>
-                    Send ₱{{ "{:,.0f}".format(booking.total_price) }} via Maya to <strong>0975-078-8092</strong><br>
+                    Send ₱{{ "{:,.0f}".format((((booking.total_price) | float) or 0)) }} via Maya to <strong>0975-078-8092</strong><br>
                     Account: TICK.IT Cinema · Ref: {{ booking.ref_code }}
                 </div>
                 <div class="fg">
@@ -242,7 +242,7 @@
                 </div>
                 <div class="fg"><label class="fl">Cardholder Name</label><input type="text" class="fi" id="cc-name" placeholder="Name on card"></div>
                 <button type="button" class="pay-btn" onclick="doPayment('credit_card')">
-                    <span id="cc-lbl">💳 Pay ₱{{ "{:,.0f}".format(booking.total_price) }}</span>
+                    <span id="cc-lbl">💳 Pay ₱{{ "{:,.0f}".format((((booking.total_price) | float) or 0)) }}</span>
                 </button>
             </div>
 
@@ -259,7 +259,7 @@
                 </div>
                 <div class="fg"><label class="fl">Cardholder Name</label><input type="text" class="fi" id="dc-name" placeholder="Name on card"></div>
                 <button type="button" class="pay-btn" onclick="doPayment('debit_card')">
-                    <span id="dc-lbl">🏦 Pay ₱{{ "{:,.0f}".format(booking.total_price) }}</span>
+                    <span id="dc-lbl">🏦 Pay ₱{{ "{:,.0f}".format((((booking.total_price) | float) or 0)) }}</span>
                 </button>
             </div>
 

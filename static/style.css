@@ -42,6 +42,9 @@ body {
     gap: 10px;
     align-items: center;
     flex-shrink: 0;
+    position: absolute;
+    left: 50%;
+    transform: translateX(-50%);
 }
 
 .nav-btn {
@@ -578,13 +581,115 @@ body {
     .step-arrow           { display: none; }
     .steps-row            { gap: 12px; }
     .home-section         { padding: 24px 18px 28px; }
+    
+    /* Fix navbar for tablet/mobile */
+    .navbar {
+        flex-wrap: wrap;
+        height: auto;
+        min-height: 60px;
+        padding: 10px 12px;
+        gap: 8px;
+    }
+    
+    .logo { order: 1; font-size: 1.3rem; }
+    .navbar > div:nth-child(2) { order: 2; } /* Profile + username */
+    .search-wrap { order: 3; margin-left: auto; gap: 6px; }
+    .nav-buttons { 
+        order: 4;
+        position: static;
+        transform: none;
+        width: 100%;
+        justify-content: center;
+        margin-top: 8px;
+    }
 }
 @media (max-width: 600px) {
-    .navbar { flex-wrap: wrap; height: auto; padding: 10px 12px; }
-    .nav-btn { width: 78px; font-size: 12px; height: 30px; }
-    .search-input { width: 110px; }
-    .trending-label { font-size: 16px; }
+    /* Navbar mobile fixes */
+    .navbar {
+        flex-wrap: wrap;
+        height: auto;
+        min-height: 60px;
+        padding: 10px 12px;
+        gap: 8px;
+    }
+    
+    /* Reorganize navbar for mobile */
+    .logo { order: 1; font-size: 1.3rem; }
+    
+    /* Profile and username */
+    .navbar > div:nth-child(2) { order: 2; }
+    
+    /* Center nav buttons - move to second row */
+    .nav-buttons {
+        order: 4;
+        position: static;
+        transform: none;
+        width: 100%;
+        justify-content: center;
+        margin-top: 8px;
+    }
+    
+    /* Search wrap */
+    .search-wrap {
+        order: 3;
+        margin-left: auto;
+        gap: 6px;
+    }
+    
+    .nav-btn {
+        width: 70px;
+        font-size: 11px;
+        height: 28px;
+        padding: 0 8px;
+    }
+    .search-input {
+        width: 100px;
+        height: 28px;
+        font-size: 12px;
+    }
+    .search-btn {
+        width: 28px;
+        height: 28px;
+        font-size: 12px;
+    }
+    .logout-btn {
+        height: 26px;
+        padding: 0 10px;
+        font-size: 11px;
+    }
+    .user-greeting {
+        display: none; /* Hide greeting on mobile */
+    }
+
+    /* Hero section */
+    .trending-label { font-size: 14px; padding: 3px 10px; }
+    .carousel-slide img { height: 160px; }
     .about-block, .contact-block { padding: 20px 16px; }
     .coming-soon-grid { grid-template-columns: 1fr; }
     .venues-grid      { grid-template-columns: 1fr; }
+    .mini-cards-row   { grid-template-columns: 1fr; }
+
+    /* Movie cards */
+    .movie-card { width: 140px; }
+    .movie-card img { height: 200px; }
+    .movie-title { font-size: 12px; }
+}
+
+@media (max-width: 480px) {
+    .navbar { padding: 8px 10px; }
+    .logo { font-size: 1.1rem; }
+    .profile-img { width: 32px; height: 32px; }
+    .nav-btn { width: 60px; font-size: 10px; }
+    .search-input { width: 80px; }
+    .search-btn { width: 26px; height: 26px; }
+}
+
+@media (max-width: 400px) {
+    .nav-btn {
+        width: 60px;
+        font-size: 10px;
+        padding: 0 4px;
+    }
+    .logo { font-size: 1.1rem; }
+    .search-input { width: 70px; }
 }

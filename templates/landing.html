@@ -31,11 +31,20 @@
     <div class="bg-overlay-center"></div>
     <div class="bg-overlay-bottom"></div>
 
-    <!-- Top bar -->
-    <div class="top-bar">
+    <!-- Navbar -->
+    <nav class="navbar" style="position:relative;z-index:10;">
         <div class="logo">TICK.<span>IT</span></div>
-        <a href="/login" class="signin-top-btn">Sign In</a>
-    </div>
+        <!-- Centered nav buttons -->
+        <div style="position:absolute;left:50%;transform:translateX(-50%);display:flex;gap:10px;align-items:center;">
+            <a href="/movies" class="nav-btn">Movies</a>
+            <a href="/home"   class="nav-btn">Home</a>
+            <a href="/booking" class="nav-btn">Booking</a>
+        </div>
+        <!-- Right: Sign In -->
+        <div class="nav-auth-links" style="margin-left:auto;">
+            <a href="/login" class="nav-auth-btn">Sign In</a>
+        </div>
+    </nav>
 
     <!-- Hero content -->
     <div class="hero-content">

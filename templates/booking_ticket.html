@@ -240,24 +240,64 @@
 
         <div class="receipt-row" style="font-size: 16px; font-weight: 900;">
             <span class="label">💰 Total Amount</span>
-            <span class="value" style="color: #4caf50; font-size: 18px;">₱{{ "{:,.0f}".format(booking.total_price) }}</span>
+            <span class="value" style="color: #4caf50; font-size: 18px;">₱{{ "{:,.0f}".format((((booking.total_price) | float) or 0)) }}</span>
+        </div>
+
+        <!-- STATUS BANNER -->
+        <div style="margin: 16px 0; padding: 16px; border-radius: 12px;
+                    background: rgba(255,170,0,0.12); border: 2px solid #cc8800; text-align:center;">
+            <div style="font-size:28px; margin-bottom:6px;">⏳</div>
+            <div style="font-size:16px; font-weight:900; color:#ffd966; margin-bottom:4px;">
+                Booking Pending — Awaiting Payment
+            </div>
+            <div style="font-size:13px; color:#ffaa44; margin-bottom:10px;">
+                Your seats are <strong>reserved for 5 hours</strong>. Pay at the cinema counter to confirm.
+            </div>
+            <div style="font-size:22px; font-weight:900; color:#fff; font-family:monospace;"
+                 id="countdown-timer">5:00:00</div>
+            <div style="font-size:11px; color:#888; margin-top:4px;">Time remaining to pay</div>
+        </div>
+
+        <!-- STATUS STEPS -->
+        <div style="display:flex; gap:0; margin: 16px 0; border-radius:10px; overflow:hidden; border:1px solid #333;">
+            <div style="flex:1; padding:10px 6px; text-align:center; background:rgba(206,0,0,0.2); border-right:1px solid #333;">
+                <div style="font-size:18px;">✅</div>
+                <div style="font-size:10px; color:#CE0000; font-weight:700; margin-top:3px;">BOOKED</div>
+            </div>
+            <div style="flex:1; padding:10px 6px; text-align:center; background:rgba(255,170,0,0.15); border-right:1px solid #333;">
+                <div style="font-size:18px;">💳</div>
+                <div style="font-size:10px; color:#ffd966; font-weight:700; margin-top:3px;">PAY AT COUNTER</div>
+            </div>
+            <div style="flex:1; padding:10px 6px; text-align:center; background:rgba(255,255,255,0.03);">
+                <div style="font-size:18px; opacity:0.3;">🎬</div>
+                <div style="font-size:10px; color:#555; font-weight:700; margin-top:3px;">CONFIRMED</div>
+            </div>
         </div>
 
         <div class="payment-info">
-            💳 <strong>Payment Instructions:</strong><br>
-            Please proceed to the cinema counter to complete the payment. 
-            Show your booking reference to the staff. Payment must be completed 
-            at least 15 minutes before showtime.
+            💳 <strong>How to complete your booking:</strong><br>
+            1. Go to the cinema counter before your showtime<br>
+            2. Show this reference code or QR to the staff<br>
+            3. Pay ₱{{ "{:,.0f}".format((((booking.total_price) | float) or 0)) }} — staff will confirm your booking<br>
+            4. Your status will update to <strong>Confirmed</strong> ✅
         </div>
 
         <div class="qr-section">
-            <div style="font-size: 12px; color: #aaa; margin-bottom: 10px;">🏠 Show this ticket to cinema staff:</div>
-            <div class="qr-placeholder">📱 QR Code<br><span style="font-size: 11px;">Coming soon</span></div>
-            <div class="qr-text">You can also show your booking reference: <strong>{{ booking.ref_code }}</strong></div>
+            <div style="font-size: 12px; color: #aaa; margin-bottom: 10px;">📱 Show this to cinema staff:</div>
+            {% if booking.qr_code_data %}
+            <img src="{{ url_for('booking_qr_image', ref_code=booking.ref_code) }}"
+                 alt="Booking QR Code"
+                 style="width:200px;height:200px;border-radius:8px;background:#fff;padding:8px;">
+            {% else %}
+            <div class="qr-placeholder">📱 QR Code<br><span style="font-size: 11px;">Generating...</span></div>
+            {% endif %}
+            <div class="qr-text">Reference: <strong>{{ booking.ref_code }}</strong></div>
         </div>
 
-        <div style="background: rgba(100, 175, 80, 0.1); border: 1px solid #4caf50; border-radius: 8px; padding: 12px 14px; margin: 14px 0; font-size: 12px; color: #4caf50;">
-            ✅ Your seats are reserved until 15 minutes before showtime.
+        <div style="background:rgba(244,67,54,0.1);border:1px solid #f44336;border-radius:8px;
+                    padding:12px 14px;margin:14px 0;font-size:12px;color:#ff8888;">
+            ⚠️ <strong>Important:</strong> If payment is not completed within 5 hours,
+            your reservation will be <strong>automatically cancelled</strong> and seats released.
         </div>
 
         {% endif %}
@@ -278,5 +318,27 @@
 
 <div class="footer-bar"><p class="footer-text">© 2025 TICK.IT — All rights reserved</p></div>
 
+<script>
+// 5-hour countdown from page load
+(function() {
+    const el = document.getElementById('countdown-timer');
+    if (!el) return;
+    let secs = 5 * 60 * 60; // 5 hours in seconds
+    function tick() {
+        if (secs <= 0) {
+            el.textContent = 'EXPIRED';
+            el.style.color = '#f44336';
+            return;
+        }
+        const h = Math.floor(secs / 3600);
+        const m = Math.floor((secs % 3600) / 60);
+        const s = secs % 60;
+        el.textContent = `${h}:${String(m).padStart(2,'0')}:${String(s).padStart(2,'0')}`;
+        secs--;
+        setTimeout(tick, 1000);
+    }
+    tick();
+})();
+</script>
 </body>
 </html>

@@ -70,7 +70,7 @@
 
     <div class="my-bookings-list" id="bookingsList">
         {% for b in bookings %}
-        <div class="my-booking-card status-{{ b.status.lower() }}" data-movie="{{ b.movie }}" data-status="{{ b.status.lower() }}" data-date="{{ b.booked_on.timestamp() if b.booked_on.timestamp else 0 }}" data-price="{{ b.total }}">
+        <div class="my-booking-card status-{{ b.status.lower() }}" data-movie="{{ b.movie }}" data-status="{{ b.status.lower() }}" data-date="{{ b.booked_on_ts }}" data-price="{{ b.total }}">
             <div class="mbc-top">
                 <div class="mbc-movie">{{ b.movie }}</div>
                 <div class="mbc-status mbc-status-{{ b.status.lower() }}">{{ b.status }}</div>
@@ -84,13 +84,17 @@
                 <div class="mbc-item"><span class="mbc-lbl">🕐 Showtime</span><span class="mbc-val">{{ b.showtime }}</span></div>
                 <div class="mbc-item"><span class="mbc-lbl">💺 Seats</span><span class="mbc-val">{{ b.seats }}</span></div>
                 <div class="mbc-item"><span class="mbc-lbl">🎫 Type</span><span class="mbc-val">{{ b.ticket_type }}</span></div>
-                <div class="mbc-item"><span class="mbc-lbl">💰 Total</span><span class="mbc-val mbc-total">₱{{ "{:,.0f}".format(b.total) }}</span></div>
+                <div class="mbc-item"><span class="mbc-lbl">💰 Total</span><span class="mbc-val mbc-total">₱{{ "{:,.0f}".format((((b.total) | float) or 0)) }}</span></div>
             </div>
 
             <!-- Payment & Discount Status Row -->
             <div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap;margin-bottom:12px;">
                 {% if b.payment_status == 'paid' %}
                     <span style="font-size:11px;font-weight:700;padding:3px 10px;border-radius:5px;background:rgba(76,175,80,.15);color:#4caf50;border:1px solid #4caf50;">✅ Paid</span>
+                {% elif b.payment_status == 'walkin_pending' %}
+                    <span style="font-size:11px;font-weight:700;padding:3px 10px;border-radius:5px;background:rgba(255,170,0,.15);color:#ffd966;border:1px solid #cc8800;">⏳ Awaiting Payment at Counter</span>
+                    <span class="walkin-countdown" data-created="{{ b.booked_on.strftime('%Y-%m-%d %H:%M:%S') if b.booked_on else '' }}" style="font-size:11px;font-weight:700;padding:3px 10px;border-radius:5px;background:rgba(206,0,0,.15);color:#ff8888;border:1px solid #cc0000;">⏱️ <span class="countdown-text">Calculating...</span></span>
+                    <a href="/booking/ticket?ref={{ b.ref }}" style="font-size:11px;font-weight:700;padding:3px 10px;border-radius:5px;background:rgba(206,0,0,.15);color:#CE0000;border:1px solid #CE0000;text-decoration:none;">🎫 View Ticket →</a>
                 {% elif b.payment_status == 'pending' %}
                     <span style="font-size:11px;font-weight:700;padding:3px 10px;border-radius:5px;background:rgba(255,170,0,.15);color:#ffd966;border:1px solid #cc8800;">⏳ Payment Pending</span>
                     <a href="/payment/checkout?ref={{ b.ref }}" style="font-size:11px;font-weight:700;padding:3px 10px;border-radius:5px;background:rgba(206,0,0,.15);color:#CE0000;border:1px solid #CE0000;text-decoration:none;">💳 Complete Payment →</a>
@@ -101,9 +105,26 @@
                 {% endif %}
             </div>
 
+            <!-- QR Code (show for paid or walkin_pending bookings) -->
+            {% if b.payment_status in ('paid', 'walkin_pending') and b.has_qr %}
+            <div class="qr-toggle-wrap" id="qr-wrap-{{ loop.index }}">
+                <button class="qr-toggle-btn" onclick="toggleQR({{ loop.index }})">
+                    📱 Show QR Code
+                </button>
+                <div class="qr-box" id="qr-box-{{ loop.index }}" style="display:none;">
+                    <img src="{{ url_for('booking_qr_image', ref_code=b.ref) }}"
+                         alt="QR Code"
+                         style="width:200px;height:200px;border-radius:10px;background:#fff;padding:8px;display:block;margin:0 auto;">
+                    <div style="text-align:center;font-size:12px;color:#888;margin-top:8px;">
+                        Show this to cinema staff at entry
+                    </div>
+                </div>
+            </div>
+            {% endif %}
+
             <div class="mbc-footer">
                 <span class="mbc-ref">Ref: <strong>{{ b.ref }}</strong></span>
-                <span class="mbc-booked-on">Booked on {{ b.booked_on }}</span>
+                <span class="mbc-booked-on">Booked on {{ b.booked_on.strftime('%b %d, %Y') if b.booked_on else '—' }}</span>
             </div>
         </div>
         {% endfor %}
@@ -124,12 +145,14 @@
 .my-bookings-list { display:flex; flex-direction:column; gap:16px; max-width:860px; }
 .my-booking-card { background:#110000; border:1px solid #300000; border-radius:14px; padding:20px 24px; }
 .my-booking-card.status-confirmed { border-left:4px solid #4caf50; }
+.my-booking-card.status-pending   { border-left:4px solid #ffd966; }
 .my-booking-card.status-cancelled { border-left:4px solid #ff4444; opacity:.7; }
 .my-booking-card.status-completed { border-left:4px solid #888; }
 .mbc-top   { display:flex; justify-content:space-between; align-items:center; margin-bottom:14px; }
 .mbc-movie { font-size:17px; font-weight:800; color:#fff; }
 .mbc-status { font-size:11px; font-weight:700; padding:4px 10px; border-radius:5px; }
 .mbc-status-confirmed { background:rgba(76,175,80,.15); color:#4caf50; border:1px solid #4caf50; }
+.mbc-status-pending   { background:rgba(255,170,0,.15); color:#ffd966; border:1px solid #cc8800; }
 .mbc-status-cancelled { background:rgba(204,0,0,.15); color:#ff6666; border:1px solid #ff4444; }
 .mbc-status-completed { background:rgba(136,136,136,.15); color:#aaa; border:1px solid #555; }
 .mbc-grid   { display:grid; grid-template-columns:repeat(3,1fr); gap:10px; margin-bottom:14px; }
@@ -144,6 +167,10 @@
 .sort-btn { height:36px; padding:0 14px; background:rgba(255,255,255,.06); border:1px solid #444; border-radius:6px; color:#aaa; font-weight:700; font-size:12px; cursor:pointer; transition:all 0.2s; }
 .sort-btn:hover { background:rgba(255,255,255,.12); color:#fff; }
 .sort-btn.active { background:#CE0000; border-color:#CE0000; color:#fff; }
+.qr-toggle-wrap { margin-bottom:12px; }
+.qr-toggle-btn { background:rgba(206,0,0,0.12); border:1px solid #CE0000; border-radius:8px; color:#CE0000; padding:8px 16px; font-size:13px; font-weight:700; cursor:pointer; transition:all 0.2s; }
+.qr-toggle-btn:hover { background:#CE0000; color:#fff; }
+.qr-box { margin-top:12px; padding:16px; background:rgba(0,0,0,0.3); border-radius:10px; border:1px solid #333; }
 @media(max-width:600px) { .mbc-grid { grid-template-columns:1fr 1fr; } }
 </style>
 
@@ -189,6 +216,68 @@ document.addEventListener("click", function(e) {
     const pd = document.getElementById("profileDropdown");
     if (pd && !pd.contains(e.target)) document.getElementById("dropdownMenu").classList.remove("show");
 });
+
+function toggleQR(index) {
+    const box = document.getElementById('qr-box-' + index);
+    const btn = document.querySelector('#qr-wrap-' + index + ' .qr-toggle-btn');
+    if (box.style.display === 'none') {
+        box.style.display = 'block';
+        btn.textContent = '🙈 Hide QR Code';
+    } else {
+        box.style.display = 'none';
+        btn.textContent = '📱 Show QR Code';
+    }
+}
+
+// ── Walk-in Countdown Timer (5 hours) ──────────────────────────
+function updateCountdowns() {
+    const countdowns = document.querySelectorAll('.walkin-countdown');
+    const now = new Date().getTime();
+    
+    countdowns.forEach(function(el) {
+        const createdStr = el.getAttribute('data-created');
+        if (!createdStr) return;
+        
+        // Parse created time
+        const created = new Date(createdStr.replace(' ', 'T')).getTime();
+        const expiryTime = created + (5 * 60 * 60 * 1000); // 5 hours in milliseconds
+        const remaining = expiryTime - now;
+        
+        const textEl = el.querySelector('.countdown-text');
+        if (!textEl) return;
+        
+        if (remaining <= 0) {
+            textEl.textContent = 'EXPIRED';
+            el.style.background = 'rgba(204,0,0,.25)';
+            el.style.color = '#ff4444';
+            el.style.borderColor = '#cc0000';
+        } else {
+            // Calculate hours, minutes, seconds
+            const hours = Math.floor(remaining / (1000 * 60 * 60));
+            const minutes = Math.floor((remaining % (1000 * 60 * 60)) / (1000 * 60));
+            const seconds = Math.floor((remaining % (1000 * 60)) / 1000);
+            
+            textEl.textContent = hours + 'h ' + minutes + 'm ' + seconds + 's left';
+            
+            // Change color based on time remaining
+            if (remaining < 30 * 60 * 1000) { // Less than 30 minutes
+                el.style.background = 'rgba(204,0,0,.25)';
+                el.style.color = '#ff4444';
+                el.style.borderColor = '#cc0000';
+            } else if (remaining < 60 * 60 * 1000) { // Less than 1 hour
+                el.style.background = 'rgba(255,170,0,.2)';
+                el.style.color = '#ffaa00';
+                el.style.borderColor = '#cc8800';
+            }
+        }
+    });
+}
+
+// Update countdown every second
+if (document.querySelectorAll('.walkin-countdown').length > 0) {
+    updateCountdowns();
+    setInterval(updateCountdowns, 1000);
+}
 </script>
 </body>
 </html>

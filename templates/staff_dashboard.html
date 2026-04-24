@@ -1,0 +1,585 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<title>TICK.IT Staff</title>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700;900&display=swap" rel="stylesheet">
+<style>
+*,*::before,*::after{margin:0;padding:0;box-sizing:border-box}
+html,body{height:100%;-webkit-tap-highlight-color:transparent}
+body{font-family:'Inter',sans-serif;background:#0d0000;color:#fff;min-height:100vh}
+
+/* HEADER */
+.hdr{background:#000;border-bottom:2px solid #CE0000;padding:10px 14px;
+     display:flex;align-items:center;justify-content:space-between;
+     position:sticky;top:0;z-index:200;gap:8px}
+.hdr-logo{font-size:18px;font-weight:900;color:#CE0000;white-space:nowrap;flex-shrink:0}
+.hdr-name{font-size:11px;color:#888;white-space:nowrap;flex-shrink:0}
+.nav{display:flex;gap:4px;flex-wrap:nowrap}
+.nav a{color:#aaa;text-decoration:none;font-size:11px;padding:5px 8px;
+       border-radius:6px;white-space:nowrap;transition:all .2s}
+.nav a:hover{color:#CE0000}
+.nav a.active{color:#fff;background:rgba(206,0,0,.25);border:1px solid #CE0000}
+
+/* LAYOUT */
+.wrap{max-width:560px;margin:0 auto;padding:14px}
+
+/* FLASH */
+.flash{padding:10px 14px;border-radius:8px;margin-bottom:12px;font-size:13px;font-weight:600}
+.flash-success{background:rgba(76,175,80,.15);border:1px solid #4caf50;color:#4caf50}
+.flash-error  {background:rgba(244,67,54,.15);border:1px solid #f44336;color:#f44336}
+.flash-warning{background:rgba(255,152,0,.15);border:1px solid #ff9800;color:#ff9800}
+.flash-info   {background:rgba(33,150,243,.15);border:1px solid #2196f3;color:#64b5f6}
+
+/* STATS */
+.stats{display:flex;gap:10px;margin-bottom:14px}
+.stat{flex:1;background:rgba(206,0,0,.1);border:1px solid #CE0000;
+      border-radius:10px;padding:10px;text-align:center}
+.stat-n{font-size:26px;font-weight:900;color:#CE0000}
+.stat-l{font-size:10px;color:#aaa;text-transform:uppercase;margin-top:2px}
+
+/* CARD */
+.card{background:rgba(0,0,0,.4);border:2px solid #333;border-radius:14px;
+      padding:14px;margin-bottom:14px}
+.card-title{font-size:15px;font-weight:700;margin-bottom:12px;
+            display:flex;align-items:center;gap:8px}
+
+/* CAMERA */
+#cam-wrap{position:relative;width:100%;max-width:340px;margin:0 auto 12px;
+          border-radius:12px;overflow:hidden;background:#000;
+          aspect-ratio:1/1;display:none}
+#cam-video{width:100%;height:100%;object-fit:cover;display:block}
+#cam-canvas{display:none}
+.scan-overlay{position:absolute;inset:0;display:flex;align-items:center;
+              justify-content:center;pointer-events:none}
+.scan-box{width:62%;aspect-ratio:1;border:2px solid rgba(206,0,0,.7);
+          border-radius:10px;position:relative}
+.scan-box::before,.scan-box::after,.scan-box b::before,.scan-box b::after{
+  content:'';position:absolute;width:18px;height:18px;
+  border-color:#CE0000;border-style:solid}
+.scan-box::before {top:-2px;left:-2px;border-width:3px 0 0 3px}
+.scan-box::after  {top:-2px;right:-2px;border-width:3px 3px 0 0}
+.scan-box b::before{bottom:-2px;left:-2px;border-width:0 0 3px 3px}
+.scan-box b::after {bottom:-2px;right:-2px;border-width:0 3px 3px 0}
+.scan-laser{position:absolute;left:4%;right:4%;height:2px;
+            background:linear-gradient(90deg,transparent,#CE0000,transparent);
+            animation:laser 1.8s ease-in-out infinite}
+@keyframes laser{0%{top:4%;opacity:1}50%{top:92%;opacity:1}100%{top:4%;opacity:1}}
+.scan-tip{position:absolute;bottom:8px;left:0;right:0;text-align:center;
+          font-size:11px;color:rgba(255,255,255,.65)}
+
+/* CAMERA ERROR */
+.cam-err{background:rgba(244,67,54,.1);border:1px solid #f44336;
+         border-radius:8px;padding:10px 12px;margin-bottom:10px;
+         font-size:12px;color:#ff8888;display:none;line-height:1.5}
+
+/* HTTPS WARNING */
+.https-warn{background:rgba(255,152,0,.12);border:1px solid #ff9800;
+            border-radius:8px;padding:10px 12px;margin-bottom:10px;
+            font-size:12px;color:#ffd966;display:none}
+
+/* BUTTONS */
+.btn{display:flex;align-items:center;justify-content:center;gap:8px;
+     width:100%;padding:13px;border:none;border-radius:10px;
+     font-size:14px;font-weight:700;cursor:pointer;transition:all .2s;
+     -webkit-appearance:none;touch-action:manipulation}
+.btn+.btn{margin-top:8px}
+.btn-red  {background:#CE0000;color:#fff}
+.btn-red:active{background:#a00000}
+.btn-grey {background:rgba(255,255,255,.08);color:#fff;border:1px solid #555}
+.btn-grey:active{background:rgba(255,255,255,.15)}
+.btn-green{background:#4caf50;color:#fff}
+.btn-green:active{background:#388e3c}
+.btn-amber{background:#ffa000;color:#fff}
+.btn-amber:active{background:#e65100}
+
+/* MANUAL INPUT */
+.ref-input{width:100%;padding:14px 16px;background:rgba(255,255,255,.05);
+           border:1px solid #444;border-radius:10px;color:#fff;
+           font-size:20px;font-weight:700;text-transform:uppercase;
+           letter-spacing:3px;-webkit-appearance:none;margin-bottom:10px}
+.ref-input:focus{outline:none;border-color:#CE0000}
+.ref-input::placeholder{font-size:14px;letter-spacing:1px;color:#555;font-weight:400}
+
+/* LOADING */
+.loading{display:none;text-align:center;padding:20px}
+.loading.show{display:block}
+.spinner{width:38px;height:38px;border:3px solid rgba(206,0,0,.25);
+         border-top-color:#CE0000;border-radius:50%;
+         animation:spin .7s linear infinite;margin:0 auto 8px}
+@keyframes spin{to{transform:rotate(360deg)}}
+
+/* RESULT */
+.result{border-radius:14px;padding:16px;margin-bottom:14px;display:none;
+        background:rgba(0,0,0,.5)}
+.result.show{display:block}
+.result.ok  {border:2px solid #4caf50}
+.result.err {border:2px solid #f44336}
+.result.warn{border:2px solid #ff9800}
+.res-hdr{display:flex;align-items:center;gap:8px;margin-bottom:12px;
+         font-size:17px;font-weight:700}
+.res-hdr.ok  {color:#4caf50}
+.res-hdr.err {color:#f44336}
+.res-hdr.warn{color:#ff9800}
+.res-body{background:rgba(255,255,255,.04);border-radius:8px;
+          padding:10px;margin-bottom:12px}
+.drow{display:flex;justify-content:space-between;padding:7px 0;
+      border-bottom:1px solid rgba(255,255,255,.07);font-size:13px}
+.drow:last-child{border-bottom:none}
+.dlbl{color:#888}
+.dval{font-weight:600;text-align:right;max-width:58%;word-break:break-word}
+.pay-box{background:rgba(255,170,0,.1);border:1px solid #cc8800;
+         border-radius:8px;padding:12px;margin-bottom:10px;
+         font-size:13px;color:#ffd966}
+.pay-box label{display:flex;align-items:center;gap:8px;margin-top:8px;
+               cursor:pointer;font-weight:600}
+.pay-box input[type=checkbox]{width:18px;height:18px;accent-color:#CE0000;flex-shrink:0}
+.act-row{display:flex;gap:8px}
+.act-row .btn{flex:1}
+
+/* RECENT */
+.v-item{display:flex;justify-content:space-between;align-items:center;
+        padding:10px;background:rgba(255,255,255,.03);
+        border-radius:8px;margin-bottom:6px}
+.v-ref{font-weight:700;color:#CE0000;font-size:12px}
+.v-name{font-size:11px;color:#888;margin-top:2px}
+.badge{font-size:10px;padding:3px 8px;border-radius:10px;white-space:nowrap}
+.b-ok  {background:rgba(76,175,80,.2);color:#4caf50}
+.b-warn{background:rgba(255,152,0,.2);color:#ff9800}
+.b-err {background:rgba(244,67,54,.2);color:#f44336}
+</style>
+</head>
+<body>
+
+<div class="hdr">
+  <div class="hdr-logo">TICK.IT</div>
+  <nav class="nav">
+    <a href="{{ url_for('staff_dashboard') }}" class="active">Scan</a>
+    <a href="{{ url_for('staff_booking_lookup') }}">Lookup</a>
+    <a href="{{ url_for('staff_daily_report') }}">Report</a>
+    <a href="{{ url_for('logout') }}">Logout</a>
+  </nav>
+  <div class="hdr-name">{{ staff_name }}</div>
+</div>
+
+<div class="wrap">
+
+  {% with messages = get_flashed_messages(with_categories=true) %}
+    {% for cat, msg in messages %}
+    <div class="flash flash-{{ cat }}">{{ msg }}</div>
+    {% endfor %}
+  {% endwith %}
+
+  <!-- Stats -->
+  <div class="stats">
+    <div class="stat"><div class="stat-n">{{ verified_count }}</div><div class="stat-l">Today</div></div>
+    <div class="stat"><div class="stat-n" id="sess-n">0</div><div class="stat-l">Session</div></div>
+  </div>
+
+  <!-- QR Scanner -->
+  <div class="card">
+    <div class="card-title">📷 QR Scanner</div>
+
+    <div class="https-warn" id="https-warn">
+      ⚠️ Camera requires HTTPS. Open this page via <strong>https://</strong> on your phone.
+    </div>
+    <div class="cam-err" id="cam-err"></div>
+
+    <div id="cam-wrap">
+      <video id="cam-video" playsinline autoplay muted></video>
+      <canvas id="cam-canvas"></canvas>
+      <div class="scan-overlay">
+        <div class="scan-box"><b></b><div class="scan-laser"></div></div>
+      </div>
+      <div class="scan-tip">Align QR code inside the frame</div>
+    </div>
+
+    <button class="btn btn-red" id="btn-start" onclick="startCam()">📷 Start Camera Scanner</button>
+    <button class="btn btn-grey" id="btn-stop" onclick="stopCam()" style="display:none">⏹ Stop Camera</button>
+  </div>
+
+  <!-- Manual Entry -->
+  <div class="card">
+    <div class="card-title">⌨️ Enter Booking Reference</div>
+    <input type="text" class="ref-input" id="ref-in"
+           placeholder="TKT-XXXXXXXX" maxlength="20"
+           autocomplete="off" autocorrect="off" autocapitalize="characters" spellcheck="false">
+    <button class="btn btn-red" onclick="verifyManual()">🔍 Verify Reference</button>
+  </div>
+
+  <!-- Loading -->
+  <div class="loading" id="loading">
+    <div class="spinner"></div>
+    <div style="color:#aaa;font-size:13px">Verifying...</div>
+  </div>
+
+  <!-- Result -->
+  <div class="result" id="result">
+    <div class="res-hdr" id="res-hdr"></div>
+    <div class="res-body" id="res-body"></div>
+    <div id="pay-notice"></div>
+    <div class="act-row" id="act-row"></div>
+  </div>
+
+  <!-- Recent -->
+  <div class="card">
+    <div class="card-title">📋 Recent Verifications</div>
+    {% for v in recent_verifications %}
+    <div class="v-item">
+      <div>
+        <div class="v-ref">{{ v.ref_code or ('REF #' ~ v.booking_id) }}</div>
+        <div class="v-name">{{ v.customer_name or '—' }}</div>
+      </div>
+      <span class="badge {{ 'b-ok' if v.scan_status == 'valid' else ('b-warn' if v.scan_status == 'already_used' else 'b-err') }}">
+        {{ v.scan_status }}
+      </span>
+    </div>
+    {% else %}
+    <div style="text-align:center;color:#555;padding:16px;font-size:13px">No verifications yet today</div>
+    {% endfor %}
+  </div>
+
+</div><!-- /wrap -->
+
+<script>
+// ── jsQR inline (no CDN dependency) ───────────────────────────
+// Load jsQR from CDN with fallback
+(function(){
+  var s = document.createElement('script');
+  s.src = 'https://cdn.jsdelivr.net/npm/jsqr@1.4.0/dist/jsQR.min.js';
+  s.onerror = function(){
+    // fallback CDN
+    var s2 = document.createElement('script');
+    s2.src = 'https://unpkg.com/jsqr@1.4.0/dist/jsQR.js';
+    document.head.appendChild(s2);
+  };
+  document.head.appendChild(s);
+})();
+
+// ── State ──────────────────────────────────────────────────────
+var stream = null, scanning = false, sessCount = 0, curBooking = null;
+var video  = document.getElementById('cam-video');
+var canvas = document.getElementById('cam-canvas');
+var ctx    = canvas.getContext('2d');
+
+// ── HTTPS check ────────────────────────────────────────────────
+if (location.protocol !== 'https:' && location.hostname !== 'localhost' && location.hostname !== '127.0.0.1') {
+  document.getElementById('https-warn').style.display = 'block';
+  document.getElementById('btn-start').disabled = true;
+  document.getElementById('btn-start').style.opacity = '0.5';
+}
+
+// ── Camera ─────────────────────────────────────────────────────
+async function startCam() {
+  document.getElementById('cam-err').style.display = 'none';
+
+  if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
+    showCamErr('Camera API not available. Use Chrome or Safari on your phone.');
+    return;
+  }
+
+  // Try rear camera, then front, then any
+  var modes = [
+    { video: { facingMode: { ideal: 'environment' } } },
+    { video: { facingMode: 'user' } },
+    { video: true }
+  ];
+  var gotStream = false;
+  for (var i = 0; i < modes.length; i++) {
+    try {
+      stream = await navigator.mediaDevices.getUserMedia(modes[i]);
+      gotStream = true;
+      break;
+    } catch(e) { /* try next */ }
+  }
+  if (!gotStream) {
+    showCamErr('Camera access denied. Tap the camera icon in your browser address bar and allow access, then try again.');
+    return;
+  }
+
+  video.srcObject = stream;
+  try { await video.play(); } catch(e) {}
+
+  document.getElementById('cam-wrap').style.display = 'block';
+  document.getElementById('btn-start').style.display = 'none';
+  document.getElementById('btn-stop').style.display  = 'flex';
+
+  scanning = true;
+  tick();
+}
+
+function stopCam() {
+  scanning = false;
+  if (stream) { stream.getTracks().forEach(function(t){ t.stop(); }); stream = null; }
+  video.srcObject = null;
+  document.getElementById('cam-wrap').style.display = 'none';
+  document.getElementById('btn-start').style.display = 'flex';
+  document.getElementById('btn-stop').style.display  = 'none';
+}
+
+function tick() {
+  if (!scanning) return;
+  if (video.readyState >= 2 && video.videoWidth > 0) {
+    canvas.width  = video.videoWidth;
+    canvas.height = video.videoHeight;
+    ctx.drawImage(video, 0, 0);
+    try {
+      var img  = ctx.getImageData(0, 0, canvas.width, canvas.height);
+      var code = typeof jsQR !== 'undefined'
+        ? jsQR(img.data, img.width, img.height, { inversionAttempts: 'attemptBoth' })
+        : null;
+      if (code && code.data) {
+        scanning = false;
+        stopCam();
+        verifyQR(code.data);
+        return;
+      }
+    } catch(e) {}
+  }
+  requestAnimationFrame(tick);
+}
+
+function showCamErr(msg) {
+  var el = document.getElementById('cam-err');
+  el.innerHTML = '⚠️ ' + msg;
+  el.style.display = 'block';
+}
+
+// ── Verify ─────────────────────────────────────────────────────
+function verifyQR(raw) {
+  setLoading(true);
+  fetch('/staff/verify-qr', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ qr_data: raw })
+  })
+    .then(function(r){ 
+      if (!r.ok) {
+        // Handle HTTP errors (401, 403, etc.)
+        return r.json().then(function(data) {
+          if (data.redirect) {
+            alert(data.message || 'Session expired. Please log in again.');
+            window.location.href = data.redirect;
+            throw new Error('Redirecting...');
+          }
+          throw new Error(data.message || 'Request failed');
+        }).catch(function(e) {
+          // If JSON parsing fails, throw generic error
+          throw new Error('Request failed with status ' + r.status);
+        });
+      }
+      return r.json();
+    })
+    .then(function(d){ setLoading(false); showResult(d); })
+    .catch(function(e){ 
+      setLoading(false); 
+      showResult({ success:false, message:'Network error: '+e.message }); 
+    });
+}
+
+function verifyManual() {
+  var ref = document.getElementById('ref-in').value.trim().toUpperCase();
+  if (!ref) { alert('Please enter a booking reference'); return; }
+  setLoading(true);
+  fetch('/staff/verify-ref', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ ref_code: ref })
+  })
+    .then(function(r){ 
+      if (!r.ok) {
+        // Handle HTTP errors (401, 403, etc.)
+        return r.json().then(function(data) {
+          if (data.redirect) {
+            alert(data.message || 'Session expired. Please log in again.');
+            window.location.href = data.redirect;
+            throw new Error('Redirecting...');
+          }
+          throw new Error(data.message || 'Request failed');
+        }).catch(function(e) {
+          // If JSON parsing fails, throw generic error
+          throw new Error('Request failed with status ' + r.status);
+        });
+      }
+      return r.json();
+    })
+    .then(function(d){ setLoading(false); showResult(d); })
+    .catch(function(e){ 
+      setLoading(false); 
+      showResult({ success:false, message:'Network error: '+e.message }); 
+    });
+}
+
+// ── Show Result ────────────────────────────────────────────────
+function showResult(data) {
+  var box    = document.getElementById('result');
+  var hdr    = document.getElementById('res-hdr');
+  var body   = document.getElementById('res-body');
+  var notice = document.getElementById('pay-notice');
+  var acts   = document.getElementById('act-row');
+
+  box.className = 'result show';
+  notice.innerHTML = '';
+
+  if (data.success) {
+    box.classList.add('ok');
+    hdr.className = 'res-hdr ok';
+    hdr.innerHTML = '✅ ' + (data.message || 'Booking Verified');
+
+    curBooking = data.booking;
+    var b = data.booking;
+
+    var payHtml = b.payment_status === 'paid'
+      ? '<span style="color:#4caf50">✅ Paid</span>'
+      : b.payment_status === 'walkin_pending'
+        ? '<span style="color:#ffd966">🏪 Awaiting Payment</span>'
+        : '<span style="color:#ff9800">⏳ ' + b.payment_status + '</span>';
+
+    var statusHtml = b.status === 'checked_in'
+      ? '<span style="color:#4caf50">✅ Checked In</span>'
+      : b.status === 'Pending' || b.status === 'pending'
+        ? '<span style="color:#ffd966">⏳ Pending</span>'
+        : b.status === 'Confirmed' || b.status === 'confirmed'
+          ? '<span style="color:#4caf50">✅ Confirmed</span>'
+          : '<span style="color:#aaa">' + b.status + '</span>';
+
+    body.innerHTML =
+      row('Reference', '<span style="color:#CE0000;font-weight:900;letter-spacing:1px">' + b.ref_code + '</span>') +
+      row('Customer',  b.customer_name) +
+      row('Movie',     b.movie_title) +
+      row('Showtime',  b.showtime) +
+      row('Seats',     (b.seats||[]).join(', ') || '—') +
+      row('Type',      b.booking_type === 'walkin' ? '🚶 Walk-in' : '🌐 Online') +
+      row('Status',    statusHtml) +
+      row('Payment',   payHtml) +
+      row('Amount',    '₱' + parseFloat(b.total_price||0).toLocaleString('en-PH',{minimumFractionDigits:2}));
+
+    if (b.status === 'checked_in') {
+      acts.innerHTML =
+        '<div style="flex:1;text-align:center;color:#4caf50;font-weight:700;padding:10px">✅ Already Checked In</div>' +
+        btn('btn-grey', 'clearResult()', '✕ Clear');
+    } else {
+      var isWalkinUnpaid = (b.booking_type === 'walkin') && (b.payment_status !== 'paid');
+      var isPaid = b.payment_status === 'paid';
+
+      if (isWalkinUnpaid) {
+        notice.innerHTML =
+          '<div class="pay-box">⚠️ Walk-in — collect <strong>₱' +
+          parseFloat(b.total_price||0).toLocaleString('en-PH',{minimumFractionDigits:2}) +
+          '</strong> to confirm booking.' +
+          '<label><input type="checkbox" id="pay-cb"> Payment collected from customer</label></div>';
+        var bid = parseInt(b.id) || 0;
+        acts.innerHTML =
+          btn('btn-amber', 'doAction(' + bid + ',true)', '💳 Confirm &amp; Collect Payment') +
+          btn('btn-grey',  'clearResult()', '✕ Clear');
+      } else if (isPaid) {
+        var bid = parseInt(b.id) || 0;
+        acts.innerHTML =
+          btn('btn-green', 'doAction(' + bid + ',false)', '✅ Check In Customer') +
+          btn('btn-grey',  'clearResult()', '✕ Clear');
+      } else {
+        acts.innerHTML = btn('btn-grey', 'clearResult()', '✕ Clear');
+      }
+    }
+
+    sessCount++;
+    document.getElementById('sess-n').textContent = sessCount;
+
+  } else {
+    var isWarn = ['expired','already_used'].includes(data.status);
+    box.classList.add(isWarn ? 'warn' : 'err');
+    hdr.className = 'res-hdr ' + (isWarn ? 'warn' : 'err');
+    hdr.innerHTML = (isWarn ? '⚠️ ' : '❌ ') + (data.message || 'Verification Failed');
+    body.innerHTML = data.booking && data.booking.checked_in_at
+      ? '<div style="text-align:center;color:#888;padding:8px">Checked in at: ' + data.booking.checked_in_at + '</div>'
+      : '';
+    acts.innerHTML =
+      btn('btn-red',  'clearResult();startCam()', '↻ Scan Again') +
+      btn('btn-grey', 'clearResult()', '✕ Clear');
+  }
+
+  box.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+}
+
+function row(label, val) {
+  return '<div class="drow"><span class="dlbl">' + label + '</span><span class="dval">' + val + '</span></div>';
+}
+function btn(cls, onclick, label) {
+  return '<button class="btn ' + cls + '" onclick="' + onclick + '">' + label + '</button>';
+}
+
+// ── Action (confirm payment / check-in) ───────────────────────
+function doAction(bookingId, needsPayment) {
+  if (needsPayment) {
+    var cb = document.getElementById('pay-cb');
+    if (!cb || !cb.checked) {
+      alert('Please confirm payment has been collected first.');
+      return;
+    }
+  }
+  setLoading(true);
+  fetch('/staff/checkin', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ booking_id: bookingId, payment_collected: needsPayment })
+  })
+    .then(function(r){ 
+      if (!r.ok) {
+        // Handle HTTP errors (401, 403, etc.)
+        return r.json().then(function(data) {
+          if (data.redirect) {
+            alert(data.message || 'Session expired. Please log in again.');
+            window.location.href = data.redirect;
+            throw new Error('Redirecting...');
+          }
+          throw new Error(data.message || 'Request failed');
+        }).catch(function(e) {
+          // If JSON parsing fails, throw generic error
+          throw new Error('Request failed with status ' + r.status);
+        });
+      }
+      return r.json();
+    })
+    .then(function(d){
+      setLoading(false);
+      if (d.success) {
+        clearResult();
+        var msg = d.confirmed_at
+          ? '💳 Booking confirmed! Payment collected at ' + d.confirmed_at
+          : '✅ Checked in at ' + d.checked_in_at;
+        var banner = document.createElement('div');
+        banner.className = 'flash flash-success';
+        banner.textContent = msg;
+        document.querySelector('.wrap').prepend(banner);
+        setTimeout(function(){ banner.remove(); }, 4000);
+        setTimeout(function(){ location.reload(); }, 4200);
+      } else {
+        alert('❌ ' + d.message);
+      }
+    })
+    .catch(function(e){ 
+      setLoading(false); 
+      alert('Network error: ' + e.message); 
+    });
+}
+
+// ── Helpers ────────────────────────────────────────────────────
+function setLoading(on) {
+  document.getElementById('loading').classList.toggle('show', on);
+}
+function clearResult() {
+  document.getElementById('result').className = 'result';
+  document.getElementById('ref-in').value = '';
+  curBooking = null;
+}
+
+document.getElementById('ref-in').addEventListener('keypress', function(e){
+  if (e.key === 'Enter') verifyManual();
+});
+</script>
+</body>
+</html>

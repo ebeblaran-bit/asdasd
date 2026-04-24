@@ -32,6 +32,9 @@ body {
 .nav-buttons {
     display: flex; gap: 10px;
     align-items: center; flex-shrink: 0;
+    position: absolute;
+    left: 50%;
+    transform: translateX(-50%);
 }
 .nav-btn {
     display: flex; align-items: center; justify-content: center;
@@ -664,8 +667,28 @@ body {
     .seat-booking-layout { grid-template-columns: 1fr; }
     .seat-form-panel { order: -1; }
     .booking-content { padding: 20px 16px 40px; }
-    .navbar { padding: 0 14px; }
+    .navbar { 
+        padding: 0 14px;
+        flex-wrap: wrap;
+        height: auto;
+        min-height: 60px;
+        gap: 8px;
+    }
+    
+    /* Reorganize navbar for mobile */
+    .logo { order: 1; font-size: 1.3rem; }
+    .navbar > div:nth-child(2) { order: 2; } /* Profile + username wrapper */
+    .search-wrap { order: 3; margin-left: auto; gap: 6px; }
+    .nav-buttons {
+        order: 4;
+        position: static;
+        transform: none;
+        width: 100%;
+        justify-content: center;
+        margin-top: 8px;
+    }
 }
+
 @media (max-width: 700px) {
     .movie-picker-grid { grid-template-columns: repeat(2, 1fr); }
     .ticket-type-grid { grid-template-columns: 1fr; }
@@ -675,9 +698,100 @@ body {
     .sib-sep { display: none; }
     .seat { width: 28px; height: 28px; font-size: 10px; }
 }
+
 @media (max-width: 480px) {
-    .nav-buttons { display: none; }
+    .navbar { padding: 8px 10px; }
+    .logo { font-size: 1.1rem; }
+    .profile-img { width: 32px; height: 32px; }
+    .nav-btn { width: 70px; font-size: 11px; height: 30px; }
+    .search-input { width: 90px; height: 30px; font-size: 12px; }
+    .search-btn { width: 30px; height: 30px; font-size: 14px; }
+    .logout-btn { padding: 6px 10px; font-size: 11px; height: 28px; }
     .booking-title { font-size: 17px; }
     .wizard-step { padding: 8px 12px; font-size: 11px; }
     .wz-label { display: none; }
+}
+
+/* ============================
+   MOBILE FIXES (phones < 480px)
+   ============================ */
+@media (max-width: 480px) {
+    /* Navbar */
+    .navbar {
+        padding: 0 10px;
+        height: 56px;
+        gap: 8px;
+    }
+    .logo { font-size: 1.1rem; }
+    .nav-btn {
+        width: auto;
+        padding: 0 10px;
+        height: 30px;
+        font-size: 12px;
+    }
+    .logout-btn {
+        padding: 6px 10px;
+        font-size: 12px;
+    }
+    .profile-img { width: 28px; height: 28px; }
+
+    /* Booking content */
+    .booking-content { padding: 12px 10px 40px; }
+    .booking-title { font-size: 16px; margin-bottom: 14px; }
+
+    /* Wizard steps */
+    .step-wizard { gap: 4px; padding: 8px 10px; }
+    .wizard-step { padding: 6px 8px; font-size: 10px; }
+    .wz-num { width: 20px; height: 20px; font-size: 10px; }
+    .wz-label { display: none; }
+    .wizard-line { min-width: 10px; }
+
+    /* Movie picker */
+    .movie-picker-grid { grid-template-columns: repeat(2, 1fr); gap: 8px; }
+    .movie-card { padding: 10px; }
+    .movie-card img { height: 100px; }
+    .movie-card-title { font-size: 12px; }
+
+    /* Showing cards */
+    .showing-card { padding: 10px 12px; }
+    .sc-time { font-size: 16px; }
+
+    /* Seat map */
+    .seat-booking-layout { grid-template-columns: 1fr; gap: 12px; }
+    .seat-form-panel { order: -1; }
+    .seat-map-wrap { overflow-x: auto; -webkit-overflow-scrolling: touch; }
+    .seat { width: 26px; height: 26px; font-size: 9px; border-radius: 4px; }
+    .row-label { font-size: 10px; width: 18px; }
+    .screen-bar { font-size: 10px; padding: 6px; margin-bottom: 10px; }
+
+    /* Booking form */
+    .booking-form-inner { padding: 14px; }
+    .form-input, .form-select { font-size: 16px; padding: 10px 12px; }
+    .btn-book { font-size: 14px; padding: 12px; }
+
+    /* Summary */
+    .summary-row { font-size: 12px; }
+    .summary-total { font-size: 16px; }
+
+    /* Lock notice */
+    #lockNotice { font-size: 11px; padding: 8px 10px; }
+
+    /* My bookings */
+    .mbc-grid { grid-template-columns: 1fr 1fr; }
+    .mbc-movie { font-size: 14px; }
+
+    /* Payment page */
+    .receipt-card { padding: 16px 12px; }
+    .tot-amt { font-size: 22px; }
+}
+
+/* Prevent horizontal scroll on all pages */
+html { overflow-x: hidden; }
+body { overflow-x: hidden; }
+
+/* Touch-friendly tap targets */
+@media (hover: none) and (pointer: coarse) {
+    .seat { min-width: 28px; min-height: 28px; }
+    .nav-btn, .btn-book, .logout-btn { min-height: 36px; }
+    .showing-card { min-height: 48px; }
 }

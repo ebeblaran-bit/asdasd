@@ -43,6 +43,9 @@
         <a href="/admin/users" class="sidebar-link">
             <span class="sidebar-icon">👥</span><span>Users</span>
         </a>
+        <a href="/admin/staff" class="sidebar-link">
+            <span class="sidebar-icon">🎫</span><span>Staff</span>
+        </a>
         <div class="sidebar-divider"></div>
         <a href="/home" class="sidebar-link">
             <span class="sidebar-icon">🏠</span><span>Main Site</span>
@@ -70,14 +73,17 @@
             <select class="filter-select" id="statusFilter" style="height:32px; font-size:12px;"
                    onchange="filterBookings()">
                 <option value="">All Status</option>
+                <option value="pending">Pending</option>
                 <option value="confirmed">Confirmed</option>
+                <option value="checked_in">Checked In</option>
                 <option value="completed">Completed</option>
                 <option value="cancelled">Cancelled</option>
             </select>
             <select class="filter-select" id="paymentFilter" style="height:32px; font-size:12px;"
                    onchange="filterBookings()">
                 <option value="">All Payments</option>
-                <option value="pending">Pending</option>
+                <option value="walkin_pending">Walk-in Pending</option>
+                <option value="pending">Online Pending</option>
                 <option value="paid">Paid</option>
                 <option value="failed">Failed</option>
                 <option value="refunded">Refunded</option>
@@ -117,7 +123,7 @@
                                 <td style="white-space:nowrap;font-size:9px; color:#CE0000;font-weight:700;">{{ b.show_date }} {{ b.show_time }}</td>
                                 <td style="font-size:8px; white-space:nowrap;">{{ b.seat_codes }}</td>
                                 <td style="text-align:center;font-size:9px;">{{ b.ticket_count }}</td>
-                                <td style="color:#4caf50;font-weight:700;white-space:nowrap;font-size:9px;">₱{{ "{:,.0f}".format(b.total_price) }}</td>
+                                <td style="color:#4caf50;font-weight:700;white-space:nowrap;font-size:9px;">₱{{ "{:,.0f}".format((((b.total_price) | float) or 0)) }}</td>
                                 <td style="font-size:9px; white-space:nowrap;">
                                     {% if b.payment_status == 'paid' %}
                                         <span class="badge" style="background:rgba(76,175,80,.15);color:#4caf50;border:1px solid #4caf50;font-size:8px;padding:2px 5px;">✅ Paid</span>
@@ -136,48 +142,34 @@
                                 </td>
                                 <td style="font-size:8px;">
                                     <div class="tbl-actions" style="gap:2px; flex-wrap:nowrap;">
-                                        <!-- CONFIRMED STATUS -->
-                                        {% if b.status == 'Confirmed' %}
-                                            {% if b.payment_status == 'walkin_pending' %}
-                                            <form method="POST" action="/admin/bookings/mark-paid" style="display:inline;">
-                                                <input type="hidden" name="ref_code" value="{{ b.booking_ref }}">
-                                                <button type="submit" class="tbl-btn" style="height:22px; padding:0 6px; font-size:8px; background:rgba(76,175,80,.15);color:#4caf50;border:1px solid #4caf50;" title="Mark as paid (walk-in)"
-                                                    onclick="return confirm('Mark {{ b.booking_ref }} PAID?')">
-                                                    ✅ Pay
-                                                </button>
-                                            </form>
-                                            {% elif b.payment_status == 'pending' %}
-                                            <form method="POST" action="/admin/bookings/resend-reminder" style="display:inline;">
-                                                <input type="hidden" name="ref_code" value="{{ b.booking_ref }}">
-                                                <button type="submit" class="tbl-btn" style="height:22px; padding:0 6px; font-size:8px; background:rgba(30,100,200,.15);color:#5599ff;border:1px solid #2266cc;" title="Resend payment reminder">
-                                                    🔔
-                                                </button>
-                                            </form>
+                                        {% if b.status in ('Confirmed', 'confirmed') %}
+                                            {% if b.payment_status == 'paid' %}
+                                                <span style="color:#4caf50;font-size:8px;font-weight:700;">✅ Paid</span>
+                                            {% else %}
+                                                <span style="color:#aaa;font-size:8px;">—</span>
                                             {% endif %}
                                             <form method="POST" action="/admin/bookings/cancel" style="display:inline;">
                                                 <input type="hidden" name="ref_code" value="{{ b.booking_ref }}">
-                                                <button type="submit" class="tbl-btn tbl-btn-delete" style="height:22px; padding:0 6px; font-size:8px;" title="Cancel booking"
-                                                    onclick="return confirm('Cancel {{ b.booking_ref }}?')">
-                                                    ✕
-                                                </button>
+                                                <button type="submit" class="tbl-btn tbl-btn-delete" style="height:22px;padding:0 6px;font-size:8px;" title="Cancel booking"
+                                                    onclick="return confirm('Cancel {{ b.booking_ref }}?')">✕</button>
                                             </form>
 
-                                        <!-- COMPLETED STATUS -->
-                                        {% elif b.status == 'Completed' %}
-                                            <span style="color:#4caf50;font-size:8px;font-weight:700;">✓ Completed</span>
+                                        {% elif b.status in ('Pending', 'pending') %}
+                                            <span style="color:#ffd966;font-size:8px;font-weight:700;">⏳ Awaiting Staff</span>
+                                            <form method="POST" action="/admin/bookings/cancel" style="display:inline;">
+                                                <input type="hidden" name="ref_code" value="{{ b.booking_ref }}">
+                                                <button type="submit" class="tbl-btn tbl-btn-delete" style="height:22px;padding:0 6px;font-size:8px;" title="Cancel booking"
+                                                    onclick="return confirm('Cancel {{ b.booking_ref }}?')">✕</button>
+                                            </form>
 
-                                        <!-- CANCELLED STATUS -->
-                                        {% elif b.status == 'Cancelled' %}
+                                        {% elif b.status in ('checked_in',) %}
+                                            <span style="color:#4caf50;font-size:8px;font-weight:700;">✅ Checked In</span>
+
+                                        {% elif b.status in ('Completed', 'completed') %}
+                                            <span style="color:#4caf50;font-size:8px;font-weight:700;">✓ Done</span>
+
+                                        {% elif b.status in ('Cancelled', 'cancelled') %}
                                             <span style="color:#ff6666;font-size:8px;font-weight:700;">✕ Cancelled</span>
-                                        
-                                        <!-- PENDING STATUS -->
-                                        {% elif b.status == 'Pending' %}
-                                            <button class="tbl-btn tbl-btn-edit" style="height:22px; padding:0 6px; font-size:8px;" title="Approve booking">
-                                                👍
-                                            </button>
-                                            <button class="tbl-btn tbl-btn-delete" style="height:22px; padding:0 6px; font-size:8px;" title="Reject booking">
-                                                👎
-                                            </button>
                                         {% endif %}
                                     </div>
                                 </td>

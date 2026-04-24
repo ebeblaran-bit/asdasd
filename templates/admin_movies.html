@@ -43,6 +43,9 @@
         <a href="/admin/users" class="sidebar-link">
             <span class="sidebar-icon">👥</span><span>Users</span>
         </a>
+        <a href="/admin/staff" class="sidebar-link">
+            <span class="sidebar-icon">🎫</span><span>Staff</span>
+        </a>
         <div class="sidebar-divider"></div>
         <a href="/home" class="sidebar-link">
             <span class="sidebar-icon">🏠</span><span>Main Site</span>
@@ -83,7 +86,6 @@
                                 <th>Poster</th>
                                 <th>Title</th>
                                 <th>Genre</th>
-                                <th>Cast</th>
                                 <th>Duration</th>
                                 <th>Release</th>
                                 <th>Rating</th>
@@ -100,7 +102,6 @@
                                 data-id="{{ m.id }}"
                                 data-mtitle="{{ m.title | replace('"', '&quot;') | replace("'", '&#39;') }}"
                                 data-genre="{{ m.genre | replace('"', '&quot;') | replace("'", '&#39;') }}"
-                                data-cast="{{ (m.cast_members or '') | replace('"', '&quot;') | replace("'", '&#39;') }}"
                                 data-duration="{{ m.duration_mins }}"
                                 data-price="{{ m.price or 450 }}"
                                 data-rating="{{ m.rating }}"
@@ -114,7 +115,6 @@
                                 </td>
                                 <td style="font-weight:700;min-width:140px;">{{ m.title }}</td>
                                 <td>{{ m.genre }}</td>
-                                <td style="font-size:12px;color:#aaa;max-width:160px;">{{ m.cast_members or '—' }}</td>
                                 <td style="white-space:nowrap;">{{ m.duration_mins }} min</td>
                                 <td style="white-space:nowrap;">{{ m.release_date or '—' }}</td>
                                 <td>⭐ {{ m.rating }}</td>
@@ -140,7 +140,7 @@
                             </tr>
                             {% else %}
                             <tr>
-                                <td colspan="10">
+                                <td colspan="9">
                                     <div class="empty-state">
                                         <div class="empty-state-icon">🎬</div>
                                         <div class="empty-state-text">No movies found. Add one!</div>
@@ -176,15 +176,35 @@
                 </div>
                 <div class="form-group">
                     <label class="form-label">Genre *</label>
-                    <input type="text" name="genre" id="fGenre" class="form-control"
-                           placeholder="e.g. Action / Sci-Fi" required>
+                    <select name="genre" id="fGenre" class="form-control" required>
+                        <option value="" disabled selected>Select a genre</option>
+                        <optgroup label="Popular">
+                            <option value="Action">Action</option>
+                            <option value="Adventure">Adventure</option>
+                            <option value="Animation">Animation</option>
+                            <option value="Comedy">Comedy</option>
+                            <option value="Drama">Drama</option>
+                            <option value="Horror">Horror</option>
+                            <option value="Romance">Romance</option>
+                            <option value="Sci-Fi">Sci-Fi</option>
+                            <option value="Thriller">Thriller</option>
+                        </optgroup>
+                        <optgroup label="More">
+                            <option value="Crime">Crime</option>
+                            <option value="Documentary">Documentary</option>
+                            <option value="Fantasy">Fantasy</option>
+                            <option value="Musical">Musical</option>
+                            <option value="Mystery">Mystery</option>
+                            <option value="Superhero">Superhero</option>
+                            <option value="War">War</option>
+                            <option value="Western">Western</option>
+                            <option value="Action / Adventure">Action / Adventure</option>
+                            <option value="Action / Sci-Fi">Action / Sci-Fi</option>
+                            <option value="Comedy / Drama">Comedy / Drama</option>
+                            <option value="Horror / Thriller">Horror / Thriller</option>
+                        </optgroup>
+                    </select>
                 </div>
-            </div>
-
-            <div class="form-group">
-                <label class="form-label">Cast Members</label>
-                <input type="text" name="cast_members" id="fCast" class="form-control"
-                       placeholder="e.g. John Doe, Jane Smith">
             </div>
 
             <div class="form-row">
@@ -223,9 +243,9 @@
             </div>
 
             <div class="form-group">
-                <label class="form-label">Description</label>
-                <textarea name="description" id="fDesc" class="form-control"
-                          placeholder="Short movie description..."></textarea>
+                <label class="form-label">Description (includes cast info)</label>
+                <textarea name="description" id="fDesc" class="form-control" rows="4"
+                          placeholder="Enter movie description including cast members, plot summary, and other details..."></textarea>
             </div>
 
             <div class="form-group">
@@ -285,9 +305,10 @@ function openAddModal() {
     document.getElementById('submitBtn').textContent  = 'Add Movie';
     document.getElementById('movieId').value          = '';
     document.getElementById('posterHint').textContent = 'Upload a poster image (JPG, PNG).';
-    ['fTitle','fGenre','fCast','fDuration','fPrice','fRating','fReleaseDate','fDesc'].forEach(id => {
+    ['fTitle','fDuration','fPrice','fRating','fReleaseDate','fDesc'].forEach(id => {
         document.getElementById(id).value = '';
     });
+    document.getElementById('fGenre').value = '';
     document.getElementById('fStatus').value = 'active';
     document.getElementById('movieModal').classList.add('open');
 }
@@ -304,8 +325,15 @@ function openEditModal(btn) {
 
     // Decode HTML entities back to normal text for the input fields
     document.getElementById('fTitle').value       = decodeAttr(row.dataset.mtitle);
-    document.getElementById('fGenre').value       = decodeAttr(row.dataset.genre);
-    document.getElementById('fCast').value        = decodeAttr(row.dataset.cast);
+    // Set genre dropdown — if stored value isn't in list, add it dynamically
+    const genreVal = decodeAttr(row.dataset.genre);
+    const genreEl  = document.getElementById('fGenre');
+    if (genreVal && !Array.from(genreEl.options).some(o => o.value === genreVal)) {
+        const opt = document.createElement('option');
+        opt.value = genreVal; opt.textContent = genreVal;
+        genreEl.appendChild(opt);
+    }
+    genreEl.value = genreVal;
     document.getElementById('fDuration').value    = row.dataset.duration  || '';
     document.getElementById('fPrice').value       = row.dataset.price || '450';
     document.getElementById('fRating').value      = row.dataset.rating    || '';

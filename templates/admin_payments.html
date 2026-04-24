@@ -29,6 +29,7 @@
         <a href="/admin/halls"         class="sidebar-link"><span class="sidebar-icon">🏛️</span><span>Halls</span></a>
         <a href="/admin/payments"      class="sidebar-link active"><span class="sidebar-icon">💳</span><span>Payments</span></a>
         <a href="/admin/users"         class="sidebar-link"><span class="sidebar-icon">👥</span><span>Users</span></a>
+        <a href="/admin/staff"         class="sidebar-link"><span class="sidebar-icon">🎫</span><span>Staff</span></a>
         <div class="sidebar-divider"></div>
         <a href="/home"                class="sidebar-link"><span class="sidebar-icon">🏠</span><span>Main Site</span></a>
     </nav>
@@ -55,6 +56,9 @@
                 <option value="failed">Failed</option>
                 <option value="refunded">Refunded</option>
             </select>
+            <button class="btn-clear" onclick="openClearModal('failed')">🗑 Clear Failed</button>
+            <button class="btn-clear" onclick="openClearModal('pending')">🗑 Clear Pending</button>
+            <button class="btn-clear btn-clear-all" onclick="openClearModal('all')">🗑 Clear All Inactive</button>
         </div>
 
         <div class="admin-panel">
@@ -71,6 +75,7 @@
                                 <th>Status</th>
                                 <th>Created</th>
                                 <th>Paid At</th>
+                                <th>Action</th>
                             </tr>
                         </thead>
                         <tbody id="payBody">
@@ -81,7 +86,7 @@
                                 <td style="font-weight:700;">{{ p.customer_name or '—' }}</td>
                                 <td style="font-size:12px;color:#aaa;">{{ p.movie or '—' }}</td>
                                 <td style="color:#4caf50;font-weight:700;">
-                                    ₱{{ "{:,.0f}".format(p.amount) }}
+                                    ₱{{ "{:,.0f}".format((((p.amount) | float) or 0)) }}
                                 </td>
                                 <td style="font-size:11px;color:#666;font-family:monospace;">
                                     {{ p.paymongo_link_id or '—' }}
@@ -105,9 +110,15 @@
                                 <td style="font-size:11px;color:#4caf50;white-space:nowrap;">
                                     {{ p.paid_at.strftime('%Y-%m-%d %H:%M') if p.paid_at else '—' }}
                                 </td>
+                                <td>
+                                    <button class="btn-row-delete"
+                                            onclick="openClearModal('single', {{ p.id }}, '{{ p.booking_ref }}')">
+                                        🗑
+                                    </button>
+                                </td>
                             </tr>
                             {% else %}
-                            <tr><td colspan="8">
+                            <tr><td colspan="9">
                                 <div class="empty-state">
                                     <div class="empty-state-icon">💳</div>
                                     <div class="empty-state-text">No payment transactions yet.</div>
@@ -124,6 +135,63 @@
 
 <footer class="admin-footer">© 2025 TICK.IT — Admin Panel</footer>
 
+<!-- CLEAR CONFIRMATION MODAL -->
+<div id="clearModal" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,0.7);z-index:1000;align-items:center;justify-content:center;">
+    <div style="background:#1a0000;border:2px solid #CE0000;border-radius:16px;padding:32px;max-width:420px;width:90%;text-align:center;">
+        <div style="font-size:48px;margin-bottom:12px;">🗑️</div>
+        <div style="font-size:20px;font-weight:700;color:#fff;margin-bottom:8px;" id="clearModalTitle">Clear Records</div>
+        <div style="font-size:14px;color:#aaa;margin-bottom:24px;line-height:1.6;" id="clearModalDesc"></div>
+        <form method="POST" action="/admin/payments/clear" id="clearForm">
+            <input type="hidden" name="mode" id="clearMode">
+            <input type="hidden" name="payment_id" id="clearPaymentId">
+            <div style="display:flex;gap:12px;justify-content:center;">
+                <button type="button"
+                        onclick="document.getElementById('clearModal').style.display='none'"
+                        style="padding:10px 24px;background:transparent;border:2px solid #555;border-radius:8px;color:#aaa;font-weight:600;cursor:pointer;">
+                    Cancel
+                </button>
+                <button type="submit"
+                        style="padding:10px 24px;background:#CE0000;border:none;border-radius:8px;color:#fff;font-weight:700;cursor:pointer;">
+                    Yes, Clear
+                </button>
+            </div>
+        </form>
+    </div>
+</div>
+
+<style>
+.btn-clear {
+    padding: 8px 14px;
+    background: rgba(206,0,0,0.15);
+    border: 1px solid #CE0000;
+    border-radius: 8px;
+    color: #CE0000;
+    font-size: 13px;
+    font-weight: 600;
+    cursor: pointer;
+    transition: all 0.2s;
+    white-space: nowrap;
+}
+.btn-clear:hover { background: #CE0000; color: #fff; }
+.btn-clear-all {
+    background: rgba(206,0,0,0.25);
+    border-color: #ff4444;
+    color: #ff6666;
+}
+.btn-clear-all:hover { background: #aa0000; color: #fff; border-color: #aa0000; }
+.btn-row-delete {
+    background: transparent;
+    border: 1px solid #444;
+    border-radius: 6px;
+    color: #888;
+    padding: 4px 8px;
+    cursor: pointer;
+    font-size: 14px;
+    transition: all 0.2s;
+}
+.btn-row-delete:hover { background: rgba(206,0,0,0.2); border-color: #CE0000; color: #CE0000; }
+</style>
+
 <script>
 function filterPay() {
     const q  = document.getElementById('paySearch').value.toLowerCase();
@@ -134,6 +202,34 @@ function filterPay() {
         row.style.display = (m && s) ? '' : 'none';
     });
 }
+
+const clearMessages = {
+    failed:  { title: 'Clear Failed Records',          desc: 'This will permanently delete all <strong>failed</strong> payment records. This cannot be undone.' },
+    pending: { title: 'Clear Pending Records',         desc: 'This will permanently delete all <strong>pending</strong> payment records. This cannot be undone.' },
+    all:     { title: 'Clear All Inactive Records',    desc: 'This will permanently delete all <strong>failed and pending</strong> payment records. This cannot be undone.' },
+};
+
+function openClearModal(mode, paymentId, ref) {
+    document.getElementById('clearMode').value      = mode;
+    document.getElementById('clearPaymentId').value = paymentId || '';
+
+    if (mode === 'single') {
+        document.getElementById('clearModalTitle').textContent = 'Delete Payment Record';
+        document.getElementById('clearModalDesc').innerHTML =
+            `Delete the payment record for booking <strong style="color:#CE0000;">${ref}</strong>? This cannot be undone.`;
+    } else {
+        document.getElementById('clearModalTitle').textContent = clearMessages[mode].title;
+        document.getElementById('clearModalDesc').innerHTML    = clearMessages[mode].desc;
+    }
+
+    const modal = document.getElementById('clearModal');
+    modal.style.display = 'flex';
+}
+
+// Close modal on backdrop click
+document.getElementById('clearModal').addEventListener('click', function(e) {
+    if (e.target === this) this.style.display = 'none';
+});
 </script>
 </body>
 </html>

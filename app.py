@@ -1,13 +1,22 @@
 from flask import (Flask, render_template, request, redirect,
-                   url_for, session, flash, jsonify)
-import mysql.connector, bcrypt, re, uuid, os, string, random, base64
+                   url_for, session, flash, jsonify, send_file)
+import mysql.connector, bcrypt, re, uuid, os, string, random, base64, json
 from functools import wraps
 from datetime import datetime, date, timedelta
+from io import BytesIO
 try:
     import requests as req_lib
     REQUESTS_AVAILABLE = True
 except ImportError:
     REQUESTS_AVAILABLE = False
+
+try:
+    from qr_system import (generate_qr_data, generate_qr_image,
+                            validate_qr_code, decode_qr_data)
+    QR_AVAILABLE = True
+except ImportError:
+    QR_AVAILABLE = False
+    print("[WARNING] qr_system not available — install qrcode[pil] and Pillow")
 
 # ─────────────────────────────────────────────────────────────
 #  APP CONFIG
@@ -67,24 +76,9 @@ ALLOWED_EXTENSIONS = {'png', 'jpg', 'jpeg', 'gif', 'webp'}
 # Payment simulation weights  (must sum to 1.0)
 PAY_SUCCESS_RATE = 0.80
 PAY_FAILED_RATE  = 0.15
-# PAY_PENDING_RATE = 0.05  (remainder)
 
-# ─── PayMongo TEST MODE ───────────────────────────────────────────────────────
-# Replace these with your PayMongo TEST keys from https://dashboard.paymongo.com
-# Use TEST keys only — never commit live keys to source control.
-# 
-# To set up PayMongo test mode:
-# 1. Create account at https://dashboard.paymongo.com
-# 2. Generate TEST API keys (Secret Key and Public Key)
-# 3. Set environment variables:
-#    export PAYMONGO_SECRET_KEY="pk_test_..."
-#    export PAYMONGO_PUBLIC_KEY="pk_test..."
-# 4. Test with these card numbers:
-#    - Visa: 4343 4343 4343 4343 (any future expiry + any CVC)
-#    - Mastercard: 5555 5555 5555 4444
-#    If PAYMONGO_SECRET_KEY is not set, system falls back to payment simulation.
-PAYMONGO_SECRET_KEY = ""
-PAYMONGO_PUBLIC_KEY = ""
+PAYMONGO_SECRET_KEY = "sk_test_CWokPGwZNm3ZGYvbKJmjGTXT"
+PAYMONGO_PUBLIC_KEY = "pk_test_1nfGmEUQPQKzvcQ2jeBzGBKC"
 PAYMONGO_BASE_URL   = 'https://api.paymongo.com/v1'
 
 # For LOCAL TESTING: Use mock mode even with keys configured
@@ -219,7 +213,7 @@ def ensure_paymongo_table(db):
         print(f"[WARNING] Error ensuring paymongo_mock_links table: {str(e)}")
 
 
-RESERVATION_MINUTES = 45   # seat lock duration (increased for better UX)
+RESERVATION_MINUTES = 10   # seat lock while filling booking form (short — unlocked on page leave)
 
 def allowed_file(f):
     return '.' in f and f.rsplit('.', 1)[1].lower() in ALLOWED_EXTENSIONS
@@ -260,10 +254,42 @@ def admin_required(f):
     @wraps(f)
     def decorated(*args, **kwargs):
         if not session.get('is_admin'):
-            flash('Admin access required.', 'warning')
+            flash('Admin access required.', 'error')
             return redirect(url_for('login'))
         return f(*args, **kwargs)
     return decorated
+
+def staff_required(f):
+    """Decorator to require staff or admin role."""
+    @wraps(f)
+    def decorated_function(*args, **kwargs):
+        # Check if this is an AJAX/JSON request
+        is_json_request = request.is_json or request.headers.get('Content-Type') == 'application/json'
+        
+        # Admins can access staff pages
+        if session.get('is_admin'):
+            return f(*args, **kwargs)
+        
+        if not session.get('user_id'):
+            if is_json_request:
+                return jsonify({'success': False, 'message': 'Please log in first.', 'redirect': '/login'}), 401
+            flash('Please log in first.', 'warning')
+            return redirect(url_for('login'))
+        
+        # Verify role from DB
+        db = get_db()
+        try:
+            user = query(db, "SELECT role FROM users WHERE id=%s", (session['user_id'],), one=True)
+            if not user or user['role'] not in ('staff', 'admin'):
+                if is_json_request:
+                    return jsonify({'success': False, 'message': 'Staff access required.', 'redirect': '/'}), 403
+                flash('Staff access required.', 'error')
+                return redirect(url_for('index'))
+            session['role'] = user['role']
+        finally:
+            db.close()
+        return f(*args, **kwargs)
+    return decorated_function
 
 # ─────────────────────────────────────────────────────────────
 #  DB / FORMATTING HELPERS
@@ -289,6 +315,14 @@ def run_maintenance(db):
          WHERE status IN ('open','scheduled','full')
            AND CONCAT(show_date,' ',show_time) < %s
     """, (now,))
+    # Also cancel future showings whose hall was deleted (hall_id is NULL or hall no longer exists)
+    execute(db, """
+        UPDATE showings SET status='completed'
+         WHERE status IN ('open','scheduled','full')
+           AND (hall_id IS NULL
+                OR hall_id NOT IN (SELECT id FROM cinema_halls))
+           AND CONCAT(show_date,' ',show_time) > %s
+    """, (now,))
     execute(db, """
         UPDATE seats SET status='available', locked_until=NULL
          WHERE status='locked' AND locked_until < %s
@@ -298,22 +332,40 @@ def run_maintenance(db):
          WHERE status='Confirmed'
            AND showing_id IN (SELECT id FROM showings WHERE status='completed')
     """)
-    # Release expired pending-payment bookings (after 20 min)
-    cutoff = (datetime.now() - timedelta(minutes=20)).strftime('%Y-%m-%d %H:%M:%S')
+    # Release expired ONLINE pending-payment bookings (after 10 min browsing lock)
+    cutoff_online = (datetime.now() - timedelta(minutes=10)).strftime('%Y-%m-%d %H:%M:%S')
     execute(db, """
         UPDATE seats s
           JOIN bookings b ON b.seat_id=s.id
         SET s.status='available', s.locked_until=NULL
         WHERE b.payment_status='pending'
+          AND b.booking_type='online'
           AND b.created_at < %s
           AND s.status='locked'
-    """, (cutoff,))
+    """, (cutoff_online,))
     execute(db, """
         UPDATE bookings SET status='Cancelled'
          WHERE payment_status='pending'
+           AND booking_type='online'
            AND created_at < %s
            AND status='Confirmed'
-    """, (cutoff,))
+    """, (cutoff_online,))
+    # Release expired WALK-IN bookings (after 5 hours)
+    cutoff_walkin = (datetime.now() - timedelta(hours=5)).strftime('%Y-%m-%d %H:%M:%S')
+    execute(db, """
+        UPDATE seats s
+          JOIN bookings b ON b.seat_id=s.id
+        SET s.status='available', s.locked_until=NULL
+        WHERE b.payment_status='walkin_pending'
+          AND b.created_at < %s
+          AND s.status IN ('locked','booked')
+    """, (cutoff_walkin,))
+    execute(db, """
+        UPDATE bookings SET status='Cancelled', payment_status='failed'
+         WHERE payment_status='walkin_pending'
+           AND created_at < %s
+           AND status NOT IN ('Cancelled','Completed','checked_in')
+    """, (cutoff_walkin,))
     db.commit()
 
 # ─────────────────────────────────────────────────────────────
@@ -436,10 +488,14 @@ def get_movies_with_status(db):
         SELECT m.id, m.title, m.genre, m.rating, m.poster_path, m.duration_mins, m.price,
                (SELECT MIN(s.show_date) FROM showings s
                  WHERE s.movie_id=m.id AND s.status IN ('open','scheduled')
+                   AND s.hall_id IS NOT NULL
+                   AND EXISTS (SELECT 1 FROM cinema_halls h WHERE h.id=s.hall_id)
                    AND CONCAT(s.show_date,' ',s.show_time) > %s
                ) AS next_date,
                (SELECT COUNT(*) FROM showings s
                  WHERE s.movie_id=m.id AND s.show_date=%s
+                   AND s.hall_id IS NOT NULL
+                   AND EXISTS (SELECT 1 FROM cinema_halls h WHERE h.id=s.hall_id)
                    AND s.status IN ('open','full')) AS today_count,
                (SELECT MAX(s.show_date) FROM showings s
                  WHERE s.movie_id=m.id AND s.status='completed') AS last_played
@@ -480,6 +536,23 @@ def get_movies_with_status(db):
 try:
     db = get_db()
     ensure_paymongo_table(db)
+    # Ensure qr_verification_logs table exists
+    execute(db, """
+        CREATE TABLE IF NOT EXISTS qr_verification_logs (
+            id INT AUTO_INCREMENT PRIMARY KEY,
+            booking_id INT NOT NULL,
+            scanned_by INT NOT NULL,
+            scan_status ENUM('valid', 'invalid', 'expired', 'already_used') NOT NULL DEFAULT 'valid',
+            cinema_id INT NULL,
+            device_info VARCHAR(255) NULL,
+            scanned_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+            INDEX idx_booking (booking_id),
+            INDEX idx_scanned_by (scanned_by),
+            INDEX idx_scanned_at (scanned_at)
+        ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
+    """)
+    db.commit()
+    print("[OK] QR verification logs table initialized")
     db.close()
 except Exception as e:
     print(f"[WARNING] Error initializing tables on startup: {str(e)}")
@@ -683,9 +756,10 @@ def booking():
                            ) AS total_seeded
                     FROM showings s
                     JOIN cinemas c ON c.id=s.cinema_id
-                    LEFT JOIN cinema_halls h ON h.id=s.hall_id
+                    JOIN cinema_halls h ON h.id=s.hall_id
                     WHERE s.movie_id=%s
                       AND s.status IN ('open','scheduled','full')
+                      AND s.hall_id IS NOT NULL
                       AND CONCAT(s.show_date,' ',s.show_time) > %s
                       AND s.show_date <= %s
                     ORDER BY s.show_date, s.show_time
@@ -981,7 +1055,7 @@ def confirm_booking():
 
     db = get_db()
     try:
-        showing = query(db, "SELECT id FROM showings WHERE id=%s AND status IN ('open', 'scheduled', 'full')", (showing_id,), one=True)
+        showing = query(db, "SELECT id, movie_id FROM showings WHERE id=%s AND status IN ('open', 'scheduled', 'full')", (showing_id,), one=True)
         if not showing:
             flash('This showing is no longer available.', 'error')
             db.close()
@@ -1004,7 +1078,7 @@ def confirm_booking():
                 f"SELECT id, seat_code, category FROM seats WHERE id IN ({placeholders})", seat_ids)
 
         # ── GET MOVIE PRICE FROM DATABASE ─────────────────
-        movie = query(db, "SELECT price FROM movies WHERE id=%s", (showing['id'],), one=True)
+        movie = query(db, "SELECT price FROM movies WHERE id=%s", (showing['movie_id'],), one=True)
         movie_price = movie['price'] if movie else 450  # Default to 450 if not found
 
         # ── CALCULATE TOTAL USING MOVIE PRICE + HALL SEAT CATEGORIES ─────────
@@ -1036,10 +1110,16 @@ def confirm_booking():
         # Walk-in bookings get 'walkin_pending' status
         # Online bookings get 'pending' status
         payment_status = 'walkin_pending' if payment_mode == 'walkin' else 'pending'
+        booking_type   = 'walkin' if payment_mode == 'walkin' else 'online'
+        # Walk-in expiry: 5 hours; Online: 20 minutes
+        expiry_hours = 5 if booking_type == 'walkin' else (RESERVATION_MINUTES / 60)
+        expiry_time  = (datetime.now() + timedelta(hours=expiry_hours)).strftime('%Y-%m-%d %H:%M:%S')
 
-        # ── Lock seats + create booking records with correct payment_status ─────────
-        lock_exp = (datetime.now() + timedelta(minutes=RESERVATION_MINUTES)
-                    ).strftime('%Y-%m-%d %H:%M:%S')
+        # ── Lock seats — walk-in holds for 5 hours, online for RESERVATION_MINUTES ──
+        if booking_type == 'walkin':
+            lock_exp = (datetime.now() + timedelta(hours=5)).strftime('%Y-%m-%d %H:%M:%S')
+        else:
+            lock_exp = (datetime.now() + timedelta(minutes=RESERVATION_MINUTES)).strftime('%Y-%m-%d %H:%M:%S')
 
         for sid in seat_ids:
             execute(db, "UPDATE seats SET status='locked', locked_until=%s WHERE id=%s",
@@ -1049,20 +1129,43 @@ def confirm_booking():
                     (user_id, showing_id, seat_id, booking_ref, ref_code,
                      ticket_type, ticket_count, unit_price, total_price,
                      seat_codes, customer_name, contact, special_requests,
-                     discount_status, payment_status, status)
-                VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s)
+                     discount_status, payment_status, status, booking_type, expiry_time)
+                VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s)
             """, (user_id, showing_id, sid, ref_code, ref_code,
                   ticket_type, len(seat_ids), unit_price, total_price,
                   seat_codes_str, customer_name, contact, special, discount_status,
-                  payment_status, 'Confirmed'))
+                  payment_status,
+                  'Pending' if booking_type == 'walkin' else 'Confirmed',
+                  booking_type, expiry_time))
 
         db.commit()
 
-        # Walk-in: mark seats as booked immediately + redirect to ticket
+        # Generate QR code for this booking
+        if QR_AVAILABLE and sh_info:
+            try:
+                showtime_str = f"{sh_info['show_date']} {sh_info['show_time']}"
+                seat_list = [s['seat_code'] for s in seat_info_list]
+                qr_data = generate_qr_data(
+                    booking_id=ref_code,
+                    ref_code=ref_code,
+                    movie_title=sh_info['title'],
+                    showtime=str(showtime_str),
+                    seats=seat_list,
+                    customer_name=customer_name,
+                    booking_type=booking_type,
+                    expiry_hours=expiry_hours
+                )
+                qr_json = json.dumps(qr_data)
+                execute(db, "UPDATE bookings SET qr_code_data=%s WHERE ref_code=%s",
+                        (qr_json, ref_code))
+                db.commit()
+            except Exception as qr_err:
+                print(f"[WARNING] QR generation failed for {ref_code}: {qr_err}")
+
+        # Walk-in: seats stay LOCKED for 5 hours (not booked yet — prevents double booking)
+        # Staff will mark as booked when customer pays at counter
         if payment_mode == 'walkin':
-            # ✅ Seats are booked immediately for walk-in (no payment page)
-            for sid in seat_ids:
-                execute(db, "UPDATE seats SET status='booked', locked_until=NULL WHERE id=%s", (sid,))
+            # Keep seats as 'locked' with 5-hour expiry — do NOT mark as booked yet
             db.commit()
             return redirect(url_for('booking_ticket', ref=ref_code))
 
@@ -1113,6 +1216,7 @@ def booking_ticket():
             SELECT b.ref_code, b.customer_name, b.ticket_type,
                    b.total_price, b.ticket_count, b.seat_codes,
                    b.payment_status, b.discount_status, b.status,
+                   b.qr_code_data, b.booking_type,
                    m.title AS movie, m.poster_path,
                    c.name AS cinema,
                    h.hall_name,
@@ -1140,6 +1244,53 @@ def booking_ticket():
     return render_template('booking_ticket.html',
                            user_name=session.get('user_name') or session.get('admin_name', 'Admin'),
                            booking=booking)
+
+
+# ─────────────────────────────────────────────────────────────
+#  QR CODE IMAGE ENDPOINT
+# ─────────────────────────────────────────────────────────────
+@app.route('/booking/qr/<ref_code>')
+@login_required
+def booking_qr_image(ref_code):
+    """Serve QR code image for a booking."""
+    db = get_db()
+    try:
+        booking = query(db,
+            "SELECT qr_code_data, user_id FROM bookings WHERE ref_code=%s LIMIT 1",
+            (ref_code,), one=True)
+    finally:
+        db.close()
+
+    if not booking:
+        return "Booking not found", 404
+
+    # Only the booking owner or staff/admin can view QR
+    is_owner  = booking['user_id'] == session.get('user_id')
+    is_staff  = session.get('role') in ('staff', 'admin') or session.get('is_admin')
+    if not is_owner and not is_staff:
+        return "Forbidden", 403
+
+    if not QR_AVAILABLE:
+        return "QR library not installed. Run: pip install qrcode[pil]", 503
+
+    qr_data_raw = booking.get('qr_code_data')
+    if qr_data_raw:
+        try:
+            qr_data = json.loads(qr_data_raw)
+        except Exception:
+            qr_data = {'ref': ref_code}
+    else:
+        # Fallback: encode just the reference code
+        qr_data = {'ref': ref_code, 'v': '1.0'}
+
+    try:
+        img = generate_qr_image(qr_data, size=300)
+        buf = BytesIO()
+        img.save(buf, format='PNG')
+        buf.seek(0)
+        return send_file(buf, mimetype='image/png')
+    except Exception as e:
+        return f"QR generation error: {e}", 500
 
 
 @app.route('/payment/checkout')
@@ -1732,7 +1883,8 @@ def my_bookings():
         rows = query(db, """
             SELECT b.ref_code, b.ticket_type, b.unit_price, b.status AS booking_status,
                    b.created_at, b.customer_name, b.contact,
-                   b.discount_status, b.payment_status,
+                   b.discount_status, b.payment_status, b.booking_type,
+                   b.qr_code_data,
                    st.seat_code, st.category,
                    m.title AS movie, c.name AS cinema,
                    s.show_date, s.show_time
@@ -1742,8 +1894,8 @@ def my_bookings():
             JOIN movies   m  ON m.id   = s.movie_id
             JOIN cinemas  c  ON c.id   = s.cinema_id
             WHERE b.user_id = %s
-            ORDER BY 
-                CASE 
+            ORDER BY
+                CASE
                     WHEN b.payment_status = 'paid' THEN 0
                     ELSE 1
                 END,
@@ -1764,9 +1916,15 @@ def my_bookings():
     bookings_list = []
     for ref, seats in grouped.items():
         first = seats[0]
-        total = sum(s['unit_price'] for s in seats)
+        total = float(sum(float(s['unit_price'] or 0) for s in seats))
         d_obj = first['show_date']
         date_fmt = d_obj.strftime('%b %d, %Y') if hasattr(d_obj, 'strftime') else str(d_obj)
+        booked_on = first['created_at']
+        # Safe timestamp for JS sorting (avoid %s which fails on Windows)
+        try:
+            ts = int(booked_on.timestamp()) if booked_on else 0
+        except Exception:
+            ts = 0
         bookings_list.append({
             'ref':             ref,
             'movie':           first['movie'],
@@ -1777,9 +1935,12 @@ def my_bookings():
             'ticket_type':     first['ticket_type'],
             'total':           total,
             'status':          first['booking_status'],
-            'booked_on':       first['created_at'],
+            'booked_on':       booked_on,
+            'booked_on_ts':    ts,
             'discount_status': first['discount_status'],
             'payment_status':  first['payment_status'],
+            'booking_type':    first.get('booking_type') or 'online',
+            'has_qr':          bool(first.get('qr_code_data')),
         })
 
     return render_template('my_bookings.html',
@@ -1817,20 +1978,44 @@ def login():
                 session['is_admin']   = True
                 session['admin_name'] = 'Admin'
                 return redirect(url_for('admin_dashboard'))
+            
+            db = None
             try:
                 db   = get_db()
                 user = query(db,
                     'SELECT * FROM users WHERE email=%s OR mobile=%s',
                     (identifier, identifier), one=True)
-                db.close()
+                
                 if user and bcrypt.checkpw(password.encode(), user['password'].encode()):
                     session['user_id']   = user['id']
                     session['user_name'] = user['full_name']
+                    session['role']      = user.get('role', 'customer')
+                    
+                    # Check if user is staff
+                    if user.get('role') == 'staff':
+                        session['is_staff'] = True
+                        # Get staff profile info
+                        staff_profile = query(db, 
+                            "SELECT cinema_id FROM staff_profiles WHERE user_id=%s", 
+                            (user['id'],), one=True)
+                        if staff_profile:
+                            session['cinema_id'] = staff_profile['cinema_id']
+                        db.close()
+                        flash(f'Welcome back, {user["full_name"]}! (Staff)', 'success')
+                        return redirect(url_for('staff_dashboard'))
+                    
+                    db.close()
                     flash(f'Welcome back, {user["full_name"]}!', 'success')
                     return redirect(url_for('index'))
                 else:
+                    db.close()
                     errors['general'] = 'Invalid credentials. Please try again.'
             except Exception as e:
+                if db:
+                    try:
+                        db.close()
+                    except:
+                        pass
                 errors['general'] = f'Database error: {e}'
 
     return render_template('login.html', errors=errors, form=form)
@@ -2126,10 +2311,32 @@ def admin_halls_delete():
         return redirect(url_for('admin_halls'))
     try:
         db = get_db()
+        # Cancel any future showings assigned to this hall
+        # (past/completed showings are kept for records)
+        execute(db, """
+            UPDATE showings SET status='completed'
+            WHERE hall_id=%s AND status IN ('open','scheduled','full')
+              AND CONCAT(show_date,' ',show_time) > NOW()
+        """, (hall_id,))
+        # Release any locked seats for those showings
+        execute(db, """
+            UPDATE seats SET status='available', locked_until=NULL
+            WHERE showing_id IN (
+                SELECT id FROM showings WHERE hall_id=%s
+            ) AND status='locked'
+        """, (hall_id,))
+        # Cancel pending bookings for those showings
+        execute(db, """
+            UPDATE bookings SET status='Cancelled'
+            WHERE showing_id IN (
+                SELECT id FROM showings WHERE hall_id=%s
+            ) AND status IN ('Pending','Confirmed')
+              AND payment_status IN ('pending','walkin_pending')
+        """, (hall_id,))
         execute(db, "DELETE FROM hall_seat_config WHERE hall_id=%s", (hall_id,))
         execute(db, "DELETE FROM cinema_halls WHERE id=%s", (hall_id,))
         db.commit()
-        flash('Hall deleted.', 'success')
+        flash('Hall deleted. All future showings for this hall have been cancelled.', 'success')
     except Exception as e:
         flash(f'Error deleting hall: {e}', 'error')
     finally:
@@ -2196,11 +2403,27 @@ def admin_hall_assign_movie(hall_id):
             flash('Hall not found.', 'error')
             return redirect(url_for('admin_halls'))
 
+        # Get current datetime for validation
+        now = datetime.now()
+        current_date = now.date()
+        current_time = now.time()
+
         created = 0
         skipped = 0
+        past_time_skipped = 0
+        
         for sd in show_dates:
             for st in show_times:
                 try:
+                    # Parse the date and time
+                    show_date_obj = datetime.strptime(sd, '%Y-%m-%d').date()
+                    show_time_obj = datetime.strptime(st, '%H:%M:%S').time() if len(st) == 8 else datetime.strptime(st, '%H:%M').time()
+                    
+                    # Check if the showing is in the past
+                    if show_date_obj < current_date or (show_date_obj == current_date and show_time_obj <= current_time):
+                        past_time_skipped += 1
+                        continue
+                    
                     existing = query(db, """
                         SELECT id FROM showings
                         WHERE hall_id=%s AND show_date=%s AND show_time=%s
@@ -2219,10 +2442,21 @@ def admin_hall_assign_movie(hall_id):
                     skipped += 1
         db.commit()
 
+        # Build flash message
+        messages = []
         if created:
-            flash(f'{created} showing(s) created successfully! {skipped} skipped (already exist).', 'success')
+            messages.append(f'{created} showing(s) created successfully!')
+        if skipped:
+            messages.append(f'{skipped} skipped (already exist)')
+        if past_time_skipped:
+            messages.append(f'{past_time_skipped} skipped (time has passed)')
+        
+        if created:
+            flash(' | '.join(messages), 'success')
+        elif past_time_skipped or skipped:
+            flash(' | '.join(messages), 'warning')
         else:
-            flash(f'No new showings created. {skipped} already existed.', 'warning')
+            flash('No showings created.', 'warning')
 
     except Exception as e:
         flash(f'Error: {e}', 'error')
@@ -2297,7 +2531,6 @@ def admin_movies():
 def admin_movies_add():
     title        = request.form.get('title', '').strip()
     genre        = request.form.get('genre', '').strip()
-    cast_members = request.form.get('cast_members', '').strip()
     duration     = request.form.get('duration_mins', '120').strip()
     price        = request.form.get('price', '450').strip() or '450'
     rating       = request.form.get('rating', '0').strip() or '0'
@@ -2333,10 +2566,10 @@ def admin_movies_add():
         db = get_db()
         execute(db, """
             INSERT INTO movies
-                (title, genre, cast_members, duration_mins, price, rating,
+                (title, genre, duration_mins, price, rating,
                  release_date, status, description, poster_path)
-            VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s,%s)
-        """, (title, genre, cast_members, int(duration), int(price), float(rating),
+            VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s)
+        """, (title, genre, int(duration), int(price), float(rating),
               release_date, status_val, description, poster_path))
         db.commit()
         flash(f'Movie "{title}" added!', 'success')
@@ -2351,7 +2584,6 @@ def admin_movies_add():
 def admin_movies_edit(movie_id):
     title        = request.form.get('title', '').strip()
     genre        = request.form.get('genre', '').strip()
-    cast_members = request.form.get('cast_members', '').strip()
     duration     = request.form.get('duration_mins', '120').strip()
     price        = request.form.get('price', '450').strip() or '450'
     rating       = request.form.get('rating', '0').strip() or '0'
@@ -2382,16 +2614,16 @@ def admin_movies_edit(movie_id):
             os.makedirs(save_dir, exist_ok=True)
             poster_file.save(os.path.join(save_dir, filename))
             execute(db, """
-                UPDATE movies SET title=%s,genre=%s,cast_members=%s,duration_mins=%s,price=%s,
+                UPDATE movies SET title=%s,genre=%s,duration_mins=%s,price=%s,
                                   rating=%s,release_date=%s,status=%s,description=%s,
                                   poster_path=%s WHERE id=%s
-            """, (title, genre, cast_members, int(duration), int(price), float(rating),
+            """, (title, genre, int(duration), int(price), float(rating),
                   release_date, status_val, description, f'images/movies/{filename}', movie_id))
         else:
             execute(db, """
-                UPDATE movies SET title=%s,genre=%s,cast_members=%s,duration_mins=%s,price=%s,
+                UPDATE movies SET title=%s,genre=%s,duration_mins=%s,price=%s,
                                   rating=%s,release_date=%s,status=%s,description=%s WHERE id=%s
-            """, (title, genre, cast_members, int(duration), int(price), float(rating),
+            """, (title, genre, int(duration), int(price), float(rating),
                   release_date, status_val, description, movie_id))
         db.commit()
         flash(f'Movie "{title}" updated!', 'success')
@@ -2530,6 +2762,37 @@ def admin_payments():
         db.close()
     return render_template('admin_payments.html', payments=payments)
 
+@app.route('/admin/payments/clear', methods=['POST'])
+@admin_required
+def admin_payments_clear():
+    """Clear payment records by status (failed/pending) or a single record."""
+    mode     = request.form.get('mode', '')      # 'failed', 'pending', 'all', 'single'
+    pay_id   = request.form.get('payment_id')    # used when mode='single'
+    db = get_db()
+    try:
+        if mode == 'single' and pay_id:
+            execute(db, "DELETE FROM payments WHERE id=%s", (pay_id,))
+            flash('Payment record deleted.', 'success')
+        elif mode == 'failed':
+            execute(db, "DELETE FROM payments WHERE status='failed'")
+            flash('All failed payment records cleared.', 'success')
+        elif mode == 'pending':
+            execute(db, "DELETE FROM payments WHERE status='pending'")
+            flash('All pending payment records cleared.', 'success')
+        elif mode == 'all':
+            execute(db, "DELETE FROM payments WHERE status IN ('failed','pending')")
+            flash('All failed and pending payment records cleared.', 'success')
+        else:
+            flash('Invalid clear mode.', 'error')
+            return redirect(url_for('admin_payments'))
+        db.commit()
+    except Exception as e:
+        db.rollback()
+        flash(f'Error clearing payments: {e}', 'error')
+    finally:
+        db.close()
+    return redirect(url_for('admin_payments'))
+
 @app.route('/admin/payments/walkin-complete', methods=['POST'])
 @admin_required
 def admin_walkin_complete():
@@ -2618,6 +2881,97 @@ def admin_users_delete():
     finally:
         db.close()
     return redirect(url_for('admin_users'))
+
+# ─────────────────────────────────────────────────────────────
+#  ADMIN — STAFF MANAGEMENT
+# ─────────────────────────────────────────────────────────────
+@app.route('/admin/staff')
+@admin_required
+def admin_staff_list():
+    """List all staff accounts."""
+    db = get_db()
+    try:
+        staff = query(db, """
+            SELECT u.id, u.email, u.full_name, u.created_at,
+                   sp.employee_id, sp.cinema_id, sp.is_active,
+                   c.name as cinema_name
+            FROM users u
+            LEFT JOIN staff_profiles sp ON u.id = sp.user_id
+            LEFT JOIN cinemas c ON sp.cinema_id = c.id
+            WHERE u.role = 'staff'
+            ORDER BY u.created_at DESC
+        """)
+        
+        cinemas = query(db, "SELECT id, name FROM cinemas ORDER BY name")
+        
+        return render_template('admin_staff.html', staff=staff, cinemas=cinemas)
+        
+    finally:
+        db.close()
+
+@app.route('/admin/staff/create', methods=['POST'])
+@admin_required
+def admin_staff_create():
+    """Create new staff account (Admin only)."""
+    email = request.form.get('email', '').strip().lower()
+    full_name = request.form.get('full_name', '').strip()
+    employee_id = request.form.get('employee_id', '').strip().upper()
+    cinema_id = request.form.get('cinema_id')
+    password = request.form.get('password', '').strip()
+    
+    # Validation
+    if not all([email, full_name, employee_id, password]):
+        flash('All fields are required.', 'error')
+        return redirect(url_for('admin_staff_list'))
+    
+    db = get_db()
+    try:
+        # Check if email exists
+        existing = query(db, "SELECT id FROM users WHERE email=%s", (email,), one=True)
+        if existing:
+            flash('Email already registered.', 'error')
+            db.close()
+            return redirect(url_for('admin_staff_list'))
+        
+        # Check employee ID
+        existing_emp = query(db, 
+            "SELECT id FROM staff_profiles WHERE employee_id=%s", (employee_id,), one=True)
+        if existing_emp:
+            flash('Employee ID already exists.', 'error')
+            db.close()
+            return redirect(url_for('admin_staff_list'))
+        
+        # Hash password
+        hashed = bcrypt.hashpw(password.encode('utf-8'), bcrypt.gensalt()).decode('utf-8')
+        
+        # Create user with role='staff' (use NULL for mobile to avoid UNIQUE constraint)
+        user_id = execute(db, """
+            INSERT INTO users (email, full_name, password, role, mobile, age, gender, address)
+            VALUES (%s, %s, %s, 'staff', NULL, 0, 'Prefer not to say', '')
+        """, (email, full_name, hashed))
+        
+        # Create staff profile
+        execute(db, """
+            INSERT INTO staff_profiles (user_id, employee_id, cinema_id, is_active)
+            VALUES (%s, %s, %s, 1)
+        """, (user_id, employee_id, cinema_id if cinema_id else None))
+        
+        db.commit()
+        flash(f'Staff account created for {full_name}. They can now log in with email: {email}', 'success')
+        db.close()
+        return redirect(url_for('admin_staff_list'))
+        
+    except Exception as e:
+        try:
+            db.rollback()
+        except:
+            pass
+        flash(f'Error creating staff: {str(e)}', 'error')
+        try:
+            db.close()
+        except:
+            pass
+        return redirect(url_for('admin_staff_list'))
 
 # ─────────────────────────────────────────────────────────────
 #  PROFILE PAGE
@@ -2760,6 +3114,460 @@ def notifications():
 def forgot_password():
     flash('Password reset: contact us at TICK.IT.ph or 0975-078-8092.', 'info')
     return redirect(url_for('login'))
+
+# ════════════════════════════════════════════════════════════════════════════════
+#  STAFF VERIFICATION INTERFACE
+# ════════════════════════════════════════════════════════════════════════════════
+
+@app.route('/staff/dashboard')
+@staff_required
+def staff_dashboard():
+    """Staff verification dashboard with QR scanner."""
+    db = get_db()
+    try:
+        # Get today's stats
+        today = datetime.now().strftime('%Y-%m-%d')
+        
+        verified_today = query(db, """
+            SELECT COUNT(*) as count FROM qr_verification_logs
+            WHERE scanned_by = %s AND DATE(scanned_at) = %s
+        """, (session['user_id'], today), one=True)
+        
+        recent_verifications = query(db, """
+            SELECT q.*, b.customer_name, b.ref_code, m.title as movie_title
+            FROM qr_verification_logs q
+            JOIN bookings b ON q.booking_id = b.id
+            JOIN showings s ON b.showing_id = s.id
+            JOIN movies m ON s.movie_id = m.id
+            WHERE q.scanned_by = %s
+            ORDER BY q.scanned_at DESC
+            LIMIT 10
+        """, (session['user_id'],))
+        
+        return render_template('staff_dashboard.html',
+            verified_count=verified_today['count'] if verified_today else 0,
+            recent_verifications=recent_verifications,
+            staff_name=session.get('user_name', 'Staff')
+        )
+    finally:
+        db.close()
+
+@app.route('/staff/verify-qr', methods=['POST'])
+@staff_required
+def staff_verify_qr():
+    """AJAX endpoint to verify scanned QR code."""
+    try:
+        data = request.get_json(force=True, silent=True) or {}
+        qr_data_str = data.get('qr_data', '').strip()
+        cinema_id = session.get('cinema_id')
+        
+        if not qr_data_str:
+            return jsonify({'success': False, 'message': 'No QR data provided'})
+        
+        # Try to decode as JSON QR data first, then fall back to plain ref code
+        ref_code = None
+        if qr_data_str.startswith('{'):
+            try:
+                qr_parsed = json.loads(qr_data_str)
+                ref_code = qr_parsed.get('ref', '').upper()
+                # Validate signature if QR system available
+                if QR_AVAILABLE and ref_code:
+                    validation = validate_qr_code(qr_parsed.copy())
+                    if not validation['valid'] and validation['status'] == 'expired':
+                        return jsonify({'success': False, 'status': 'expired',
+                                        'message': 'QR code has expired'})
+            except Exception:
+                ref_code = qr_data_str.strip().upper()
+        else:
+            ref_code = qr_data_str.strip().upper()
+
+        if not ref_code:
+            return jsonify({'success': False, 'message': 'Could not read QR code'})
+
+        db = get_db()
+        try:
+            booking = query(db, """
+                SELECT b.*, m.title as movie_title,
+                       CONCAT(s.show_date, ' ', s.show_time) as showtime
+                FROM bookings b
+                JOIN showings s ON b.showing_id = s.id
+                JOIN movies m ON s.movie_id = m.id
+                WHERE b.ref_code = %s
+            """, (ref_code,), one=True)
+            
+            if not booking:
+                return jsonify({'success': False, 'message': 'Booking not found'})
+
+            if booking['status'] == 'checked_in':
+                return jsonify({
+                    'success': False, 'status': 'already_used',
+                    'message': 'Booking already checked in',
+                    'booking': {
+                        'ref_code': booking['ref_code'],
+                        'customer_name': booking['customer_name'],
+                        'checked_in_at': booking['checked_in_at'].strftime('%Y-%m-%d %H:%M') if booking.get('checked_in_at') else 'Unknown'
+                    }
+                })
+
+            if booking['status'] in ('Cancelled', 'cancelled', 'expired'):
+                return jsonify({'success': False, 'status': booking['status'],
+                                'message': f'Booking is {booking["status"]}'})
+
+            scan_status = 'valid'
+            execute(db, """
+                INSERT INTO qr_verification_logs (booking_id, scanned_by, scan_status, cinema_id, device_info)
+                VALUES (%s, %s, %s, %s, %s)
+            """, (booking['id'], session['user_id'], scan_status, cinema_id,
+                  request.headers.get('User-Agent', '')[:255]))
+            db.commit()
+            
+            return jsonify({
+                'success': True,
+                'status': 'valid',
+                'message': 'Booking verified',
+                'booking': {
+                    'id': booking['id'],
+                    'ref_code': booking['ref_code'],
+                    'customer_name': booking['customer_name'],
+                    'movie_title': booking['movie_title'],
+                    'showtime': booking['showtime'],
+                    'seats': booking['seat_codes'].split(',') if booking.get('seat_codes') else [],
+                    'status': booking['status'],
+                    'payment_status': booking['payment_status'],
+                    'booking_type': booking.get('booking_type') or 'online',
+                    'total_price': float(booking['total_price'])
+                }
+            })
+        finally:
+            db.close()
+    except Exception as e:
+        print(f"[ERROR] staff_verify_qr: {str(e)}")
+        import traceback
+        traceback.print_exc()
+        return jsonify({'success': False, 'message': f'Server error: {str(e)}'}), 500
+
+@app.route('/staff/verify-ref', methods=['POST'])
+@staff_required
+def staff_verify_ref():
+    """Verify booking by reference code (manual entry)."""
+    try:
+        data = request.get_json(force=True, silent=True) or {}
+        ref_code = data.get('ref_code', '').strip().upper()
+        
+        if not ref_code:
+            return jsonify({'success': False, 'message': 'Reference code required'})
+        
+        db = get_db()
+        try:
+            booking = query(db, """
+                SELECT b.*, m.title as movie_title,
+                       CONCAT(s.show_date, ' ', s.show_time) as showtime
+                FROM bookings b
+                JOIN showings s ON b.showing_id = s.id
+                JOIN movies m ON s.movie_id = m.id
+                WHERE b.ref_code = %s
+            """, (ref_code,), one=True)
+            
+            if not booking:
+                return jsonify({'success': False, 'message': 'Booking not found'})
+            
+            if booking['status'] == 'checked_in':
+                return jsonify({
+                    'success': False,
+                    'status': 'already_used',
+                    'message': 'Booking already checked in',
+                    'booking': {
+                        'ref_code': booking['ref_code'],
+                        'customer_name': booking['customer_name'],
+                        'checked_in_at': booking['checked_in_at'].strftime('%Y-%m-%d %H:%M') if booking['checked_in_at'] else 'Unknown'
+                    }
+                })
+            
+            if booking['status'] in ['cancelled', 'expired']:
+                return jsonify({
+                    'success': False,
+                    'status': booking['status'],
+                    'message': f'Booking is {booking["status"]}'
+                })
+            
+            # Log verification
+            execute(db, """
+                INSERT INTO qr_verification_logs (booking_id, scanned_by, scan_status, cinema_id)
+                VALUES (%s, %s, 'valid', %s)
+            """, (booking['id'], session['user_id'], session.get('cinema_id')))
+            db.commit()
+            
+            return jsonify({
+                'success': True,
+                'status': 'valid',
+                'message': 'Booking verified',
+                'booking': {
+                    'id': booking['id'],
+                    'ref_code': booking['ref_code'],
+                    'customer_name': booking['customer_name'],
+                    'movie_title': booking['movie_title'],
+                    'showtime': booking['showtime'],
+                    'seats': booking['seat_codes'].split(',') if booking.get('seat_codes') else [],
+                    'status': booking['status'],
+                    'payment_status': booking['payment_status'],
+                    'booking_type': booking.get('booking_type') or 'online',
+                    'total_price': float(booking['total_price']) if booking.get('total_price') else 0.0
+                }
+            })
+        finally:
+            db.close()
+    except Exception as e:
+        print(f"[ERROR] staff_verify_ref: {str(e)}")
+        import traceback
+        traceback.print_exc()
+        return jsonify({'success': False, 'message': f'Server error: {str(e)}'}), 500
+
+@app.route('/staff/checkin', methods=['POST'])
+@staff_required
+def staff_checkin():
+    """Mark booking as confirmed (walk-in payment) or checked in."""
+    try:
+        data = request.get_json(force=True, silent=True) or {}
+        booking_id        = data.get('booking_id')
+        payment_collected = data.get('payment_collected', False)
+
+        if not booking_id:
+            return jsonify({'success': False, 'message': 'Booking ID required'})
+
+        try:
+            booking_id = int(booking_id)
+        except (TypeError, ValueError):
+            return jsonify({'success': False, 'message': 'Invalid booking ID'})
+
+        db = get_db()
+        try:
+            booking = query(db,
+                "SELECT id, status, payment_status, booking_type FROM bookings WHERE id=%s",
+                (booking_id,), one=True)
+
+            if not booking:
+                return jsonify({'success': False, 'message': 'Booking not found'})
+
+            if booking['status'] == 'checked_in':
+                return jsonify({'success': False, 'message': 'Already checked in'})
+
+            # ── WALK-IN: confirm payment first ──────────────────────
+            if booking.get('booking_type') == 'walkin' and booking['payment_status'] != 'paid':
+                if not payment_collected:
+                    return jsonify({
+                        'success': False,
+                        'message': 'Payment required for walk-in booking',
+                        'requires_payment': True
+                    })
+                execute(db, """
+                    UPDATE bookings SET payment_status='paid', status='Confirmed'
+                    WHERE id=%s
+                """, (booking_id,))
+                execute(db, """
+                    UPDATE seats SET status='booked', locked_until=NULL
+                    WHERE id IN (SELECT seat_id FROM bookings WHERE id=%s)
+                """, (booking_id,))
+                try:
+                    execute(db, """
+                        INSERT INTO booking_status_history
+                            (booking_id, old_status, new_status, changed_by, reason)
+                        VALUES (%s, 'Pending', 'Confirmed', %s, 'Staff confirmed walk-in payment')
+                    """, (booking_id, session['user_id']))
+                except Exception:
+                    pass  # table may not exist yet
+                db.commit()
+                return jsonify({
+                    'success': True,
+                    'message': 'Booking confirmed! Payment collected.',
+                    'confirmed_at': datetime.now().strftime('%Y-%m-%d %H:%M:%S')
+                })
+
+            # ── CHECK-IN (already paid) ──────────────────────────────
+            now = datetime.now()
+            execute(db, """
+                UPDATE bookings
+                SET status='checked_in', checked_in_at=%s,
+                    checked_in_by=%s, checked_in_cinema_id=%s
+                WHERE id=%s
+            """, (now, session['user_id'], session.get('cinema_id'), booking_id))
+            execute(db, """
+                UPDATE seats SET status='checked_in'
+                WHERE id IN (SELECT seat_id FROM bookings WHERE id=%s)
+            """, (booking_id,))
+            try:
+                execute(db, """
+                    INSERT INTO booking_status_history
+                        (booking_id, old_status, new_status, changed_by, reason)
+                    VALUES (%s, %s, 'checked_in', %s, 'Staff check-in at cinema')
+                """, (booking_id, booking['status'], session['user_id']))
+            except Exception:
+                pass
+            db.commit()
+            return jsonify({
+                'success': True,
+                'message': 'Check-in successful',
+                'checked_in_at': now.strftime('%Y-%m-%d %H:%M:%S')
+            })
+
+        except Exception as e:
+            db.rollback()
+            print(f"[ERROR] staff_checkin DB error: {str(e)}")
+            import traceback
+            traceback.print_exc()
+            return jsonify({'success': False, 'message': f'Database error: {str(e)}'}), 500
+        finally:
+            db.close()
+    except Exception as e:
+        print(f"[ERROR] staff_checkin: {str(e)}")
+        import traceback
+        traceback.print_exc()
+        return jsonify({'success': False, 'message': f'Server error: {str(e)}'}), 500
+
+@app.route('/staff/booking-lookup')
+@staff_required
+def staff_booking_lookup():
+    """Search bookings by reference."""
+    ref_code = request.args.get('ref', '').strip().upper()
+
+    if not ref_code:
+        return render_template('staff_lookup.html', booking=None, ref_code='')
+
+    db = get_db()
+    try:
+        booking = query(db, """
+            SELECT b.id, b.ref_code, b.customer_name, b.seat_codes,
+                   b.status, b.payment_status, b.total_price,
+                   b.booking_type, b.checked_in_at, b.qr_code_data,
+                   m.title as movie_title,
+                   CONCAT(s.show_date, ' ', TIME_FORMAT(s.show_time, '%h:%i %p')) as showtime
+            FROM bookings b
+            JOIN showings s ON b.showing_id = s.id
+            JOIN movies   m ON s.movie_id   = m.id
+            WHERE b.ref_code = %s
+            LIMIT 1
+        """, (ref_code,), one=True)
+
+        # Convert to plain dict so Jinja2 can access all keys safely
+        booking = dict(booking) if booking else None
+
+        return render_template('staff_lookup.html', booking=booking, ref_code=ref_code)
+    finally:
+        db.close()
+
+@app.route('/staff/checkin-form', methods=['POST'])
+@staff_required
+def staff_checkin_form():
+    """Form-based check-in from the lookup page."""
+    booking_id        = request.form.get('booking_id', type=int)
+    ref_code          = request.form.get('ref_code', '').strip().upper()
+    payment_collected = request.form.get('payment_collected') == '1'
+
+    if not booking_id:
+        flash('Invalid booking.', 'error')
+        return redirect(url_for('staff_booking_lookup'))
+
+    db = get_db()
+    try:
+        booking = query(db,
+            "SELECT status, payment_status, booking_type FROM bookings WHERE id=%s",
+            (booking_id,), one=True)
+
+        if not booking:
+            flash('Booking not found.', 'error')
+            return redirect(url_for('staff_booking_lookup', ref=ref_code))
+
+        if booking['status'] == 'checked_in':
+            flash('Booking is already checked in.', 'warning')
+            return redirect(url_for('staff_booking_lookup', ref=ref_code))
+
+        # Walk-in: mark payment paid if collected
+        if booking.get('booking_type') == 'walkin' and booking['payment_status'] != 'paid':
+            if not payment_collected:
+                flash('Please confirm payment was collected before checking in.', 'error')
+                return redirect(url_for('staff_booking_lookup', ref=ref_code))
+            # CONFIRM: payment paid, status Confirmed, seats booked
+            execute(db, "UPDATE bookings SET payment_status='paid', status='Confirmed' WHERE id=%s", (booking_id,))
+            execute(db, """
+                UPDATE seats SET status='booked', locked_until=NULL
+                WHERE id IN (SELECT seat_id FROM bookings WHERE id=%s)
+            """, (booking_id,))
+            execute(db, """
+                INSERT INTO booking_status_history (booking_id, old_status, new_status, changed_by, reason)
+                VALUES (%s, 'Pending', 'Confirmed', %s, 'Staff confirmed walk-in payment via lookup')
+            """, (booking_id, session['user_id']))
+            db.commit()
+            flash(f'💳 Booking {ref_code} confirmed! Payment collected.', 'success')
+            return redirect(url_for('staff_booking_lookup', ref=ref_code))
+
+        now = datetime.now()
+        execute(db, """
+            UPDATE bookings
+            SET status='checked_in', checked_in_at=%s,
+                checked_in_by=%s, checked_in_cinema_id=%s
+            WHERE id=%s
+        """, (now, session['user_id'], session.get('cinema_id'), booking_id))
+
+        execute(db, """
+            UPDATE seats SET status='checked_in'
+            WHERE id IN (SELECT seat_id FROM bookings WHERE id=%s)
+        """, (booking_id,))
+
+        execute(db, """
+            INSERT INTO booking_status_history
+                (booking_id, old_status, new_status, changed_by, reason)
+            VALUES (%s, %s, 'checked_in', %s, 'Staff check-in via lookup')
+        """, (booking_id, booking['status'], session['user_id']))
+
+        db.commit()
+        flash(f'✅ Customer checked in successfully at {now.strftime("%H:%M")}.', 'success')
+
+    except Exception as e:
+        db.rollback()
+        flash(f'Check-in error: {e}', 'error')
+    finally:
+        db.close()
+
+    return redirect(url_for('staff_booking_lookup', ref=ref_code))
+
+
+@app.route('/staff/daily-report')
+@staff_required
+def staff_daily_report():
+    """View today's verification statistics."""
+    report_date = request.args.get('date', datetime.now().strftime('%Y-%m-%d'))
+    db = get_db()
+    try:
+        summary = query(db, """
+            SELECT
+                COUNT(*) as total_verifications,
+                SUM(CASE WHEN scan_status='valid'        THEN 1 ELSE 0 END) as successful,
+                SUM(CASE WHEN scan_status='expired'      THEN 1 ELSE 0 END) as expired,
+                SUM(CASE WHEN scan_status='already_used' THEN 1 ELSE 0 END) as already_used,
+                SUM(CASE WHEN scan_status='invalid'      THEN 1 ELSE 0 END) as invalid
+            FROM qr_verification_logs
+            WHERE DATE(scanned_at) = %s AND scanned_by = %s
+        """, (report_date, session['user_id']), one=True)
+
+        details = query(db, """
+            SELECT q.booking_id, q.scan_status, q.scanned_at,
+                   b.ref_code, b.customer_name, m.title as movie_title
+            FROM qr_verification_logs q
+            JOIN bookings b ON q.booking_id = b.id
+            JOIN showings s ON b.showing_id  = s.id
+            JOIN movies   m ON s.movie_id    = m.id
+            WHERE DATE(q.scanned_at) = %s AND q.scanned_by = %s
+            ORDER BY q.scanned_at DESC
+        """, (report_date, session['user_id']))
+
+        return render_template('staff_report.html',
+            staff_name=session.get('user_name', 'Staff'),
+            report_date=report_date,
+            summary=summary,
+            details=details or []
+        )
+    finally:
+        db.close()
+
 
 if __name__ == '__main__':
     app.run(debug=True, host='0.0.0.0', port=5000)

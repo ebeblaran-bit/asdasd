@@ -43,6 +43,9 @@
         <a href="/admin/users" class="sidebar-link">
             <span class="sidebar-icon">👥</span><span>Users</span>
         </a>
+        <a href="/admin/staff" class="sidebar-link">
+            <span class="sidebar-icon">🎫</span><span>Staff</span>
+        </a>
         <div class="sidebar-divider"></div>
         <a href="/home" class="sidebar-link">
             <span class="sidebar-icon">🏠</span><span>Main Site</span>
@@ -72,7 +75,7 @@
             <div class="stat-card">
                 <div class="stat-icon">💰</div>
                 <div class="stat-label">Total Sales</div>
-                <div class="stat-value">₱{{ "{:,.0f}".format(stats.total_sales) }}</div>
+                <div class="stat-value">₱{{ "{:,.0f}".format((((stats.total_sales) | float) or 0)) }}</div>
                 <div class="stat-sub">All confirmed bookings</div>
             </div>
             <div class="stat-card">
@@ -130,7 +133,7 @@
                                 <td>{{ b.movie_title }}</td>
                                 <td style="white-space:nowrap;">{{ b.show_date }} {{ b.show_time }}</td>
                                 <td>{{ b.seat_codes }}</td>
-                                <td style="color:#4caf50;font-weight:700;">₱{{ "{:,.0f}".format(b.total_price) }}</td>
+                                <td style="color:#4caf50;font-weight:700;">₱{{ "{:,.0f}".format((((b.total_price) | float) or 0)) }}</td>
                                 <td>
                                     <span class="badge badge-{{ b.status|lower }}">{{ b.status }}</span>
                                 </td>

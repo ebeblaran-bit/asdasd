@@ -371,7 +371,7 @@
                         <div class="mb-meta" style="margin-top:3px;">Ref: <strong style="color:#CE0000;">{{ b.ref_code }}</strong></div>
                     </div>
                     <span class="mb-status mb-{{ b.status|lower }}">{{ b.status }}</span>
-                    <div class="mb-price">₱{{ "{:,.0f}".format(b.total_price) }}</div>
+                    <div class="mb-price">₱{{ "{:,.0f}".format((((b.total_price) | float) or 0)) }}</div>
                 </div>
                 {% endfor %}
                 <div style="margin-top:16px;">
